@@ -18,7 +18,7 @@ import {
   VisibilityState,
 } from '@iwsdk/core';
 import { RoomAudio } from './audio.js';
-import catalog from './catalog.json';
+import { coverAssetId, resolveUrl, TRACKS } from './catalog.js';
 import {
   buildRoom,
   HEAD_Y,
@@ -31,10 +31,10 @@ import {
   STAND,
 } from './room.js';
 import { Sleeve, SleeveHit } from './sleeve-component.js';
-import { glowTexture } from './textures.js';
+import { glowTexture, placeholderCoverTexture } from './textures.js';
 
 const ROWS = [1.265, 1.045];
-const COLUMNS = 8;
+const COLUMNS = Math.max(1, Math.ceil(TRACKS.length / ROWS.length));
 const SHELF_DEGREES = 132;
 const ARM_REST = 0.42;
 const ARM_PLAY = -0.34;
@@ -131,8 +131,8 @@ export class ListeningSystem extends createSystem({
     const hitGeometry = new PlaneGeometry(SLEEVE_SIZE, SLEEVE_SIZE);
     // Never drawn (no draw call) but still answers rays and clicks.
     const hitMaterial = new MeshBasicMaterial({ visible: false });
-    catalog.forEach((track, index) => {
-      const texture = AssetManager.getTexture(`cover-${track.id}`)!;
+    TRACKS.forEach((track, index) => {
+      const texture = (track.art && AssetManager.getTexture(coverAssetId(track))) || placeholderCoverTexture(track.title, index);
       texture.colorSpace = SRGBColorSpace;
       texture.anisotropy = 4;
       const material = new MeshBasicMaterial({ map: texture, color: 0x222222 });
@@ -270,7 +270,7 @@ export class ListeningSystem extends createSystem({
     record.targetPos.copy(this.standPos);
     record.targetQuat.copy(this.standQuat);
     record.flying = true;
-    const track = catalog[index];
+    const track = TRACKS[index];
     if (import.meta.env.DEV) console.info(`[room] load ${track.title}`);
     const { vinyl, vinylLabel, plaque, powerLed } = this.parts;
     vinylLabel.map = record.material.map;
@@ -278,7 +278,7 @@ export class ListeningSystem extends createSystem({
     vinyl.visible = true;
     plaque.draw(track.title);
     powerLed.color.set(0xff5a28);
-    this.audio.play(`${import.meta.env.BASE_URL}catalog/audio/${track.id}.mp3`, NEEDLE_DELAY);
+    this.audio.play(resolveUrl(track.audio), NEEDLE_DELAY);
     if (!this.hasDropped) {
       this.hasDropped = true;
       this.warmthTarget = 1;
@@ -375,7 +375,7 @@ export class ListeningSystem extends createSystem({
       this.spin += delta * RPM_33;
       parts.vinyl.rotation.y = -this.spin;
     }
-    const duration = catalog[Math.max(0, this.current)].seconds || 1;
+    const duration = TRACKS[Math.max(0, this.current)].seconds || this.audio.element.duration || 1;
     const progress = Math.min(1, this.audio.element.currentTime / duration);
     const armTarget = this.current < 0 || this.paused ? ARM_REST : ARM_PLAY + (ARM_END - ARM_PLAY) * progress;
     this.armAngle += (armTarget - this.armAngle) * Math.min(1, delta * 2.4);

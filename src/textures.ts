@@ -264,3 +264,26 @@ export class TextPlaque {
     this.texture.needsUpdate = true;
   }
 }
+
+/** A sleeve for a record whose art has not arrived yet: title on warm card stock. */
+export function placeholderCoverTexture(title: string, seed: number): CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  const rand = seeded(seed + 101);
+  const hue = Math.floor(rand() * 50) + 10;
+  g.fillStyle = `hsl(${hue}, 45%, 22%)`;
+  g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = `hsla(${hue}, 70%, 70%, 0.5)`;
+  g.lineWidth = 2;
+  for (let r = 30; r < 130; r += 14) {
+    g.beginPath();
+    g.arc(128, 104, r, 0, Math.PI * 2);
+    g.stroke();
+  }
+  g.fillStyle = '#f4d6a8';
+  g.font = `600 22px Georgia, 'Times New Roman', serif`;
+  g.textAlign = 'center';
+  g.fillText(title, 128, 222, 236);
+  g.font = `italic 14px Georgia, serif`;
+  g.fillText('NoBanks Nearby', 128, 244, 236);
+  return texture(c);
+}

@@ -2,81 +2,208 @@
   {
     "id": "just-a-pinch",
     "title": "Just A Pinch",
-    "seconds": 158
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/just-a-pinch.mp3",
+    "art": "catalog/covers/just-a-pinch.jpg",
+    "seconds": 158,
+    "moods": [
+      "easy",
+      "warm"
+    ],
+    "intro": "Just A Pinch. That is all it ever takes."
   },
   {
     "id": "listening-time",
     "title": "Listening Time",
-    "seconds": 187
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/listening-time.mp3",
+    "art": "catalog/covers/listening-time.jpg",
+    "seconds": 187,
+    "moods": [
+      "mellow",
+      "slow"
+    ],
+    "intro": "Listening Time. Lean back, this one is in no hurry."
   },
   {
     "id": "warm-tape",
     "title": "Warm Tape",
-    "seconds": 133
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/warm-tape.mp3",
+    "art": "catalog/covers/warm-tape.jpg",
+    "seconds": 133,
+    "moods": [
+      "warm",
+      "lofi"
+    ],
+    "intro": "Warm Tape. A little hiss, a lot of heart."
   },
   {
     "id": "downtown-nightlight",
     "title": "Downtown Nightlight",
-    "seconds": 190
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/downtown-nightlight.mp3",
+    "art": "catalog/covers/downtown-nightlight.jpg",
+    "seconds": 190,
+    "moods": [
+      "night",
+      "city"
+    ],
+    "intro": "Downtown Nightlight. The city is still awake, and so are we."
   },
   {
     "id": "cafe-opens-at-midnight",
     "title": "Cafe Opens At Midnight",
-    "seconds": 133
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/cafe-opens-at-midnight.mp3",
+    "art": "catalog/covers/cafe-opens-at-midnight.jpg",
+    "seconds": 133,
+    "moods": [
+      "night",
+      "jazz"
+    ],
+    "intro": "Cafe Opens At Midnight. Pull up a stool."
   },
   {
     "id": "the-long-drive-home",
     "title": "The Long Drive Home",
-    "seconds": 130
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/the-long-drive-home.mp3",
+    "art": "catalog/covers/the-long-drive-home.jpg",
+    "seconds": 130,
+    "moods": [
+      "drive",
+      "mellow"
+    ],
+    "intro": "The Long Drive Home. Windows down, no traffic."
   },
   {
     "id": "lets-stay-in-tonight",
     "title": "Let's Stay In Tonight",
-    "seconds": 150
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/lets-stay-in-tonight.mp3",
+    "art": "catalog/covers/lets-stay-in-tonight.jpg",
+    "seconds": 150,
+    "moods": [
+      "cozy",
+      "slow"
+    ],
+    "intro": "Let's Stay In Tonight. Good call."
   },
   {
     "id": "on-a-different-frequency",
     "title": "On A Different Frequency",
-    "seconds": 146
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/on-a-different-frequency.mp3",
+    "art": "catalog/covers/on-a-different-frequency.jpg",
+    "seconds": 146,
+    "moods": [
+      "dreamy"
+    ],
+    "intro": "On A Different Frequency. Tune in close."
   },
   {
     "id": "velvet-and-brass",
     "title": "Velvet & Brass",
-    "seconds": 183
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/velvet-and-brass.mp3",
+    "art": "catalog/covers/velvet-and-brass.jpg",
+    "seconds": 183,
+    "moods": [
+      "jazz",
+      "brass"
+    ],
+    "intro": "Velvet and Brass. Dress up for this one."
   },
   {
     "id": "junkyard-jazz",
     "title": "Junkyard Jazz",
-    "seconds": 176
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/junkyard-jazz.mp3",
+    "art": "catalog/covers/junkyard-jazz.jpg",
+    "seconds": 176,
+    "moods": [
+      "jazz",
+      "upbeat"
+    ],
+    "intro": "Junkyard Jazz. Beautiful noise from the scrap pile."
   },
   {
     "id": "the-keys-just-know-me",
     "title": "The Keys Just Know Me",
-    "seconds": 185
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/the-keys-just-know-me.mp3",
+    "art": "catalog/covers/the-keys-just-know-me.jpg",
+    "seconds": 185,
+    "moods": [
+      "piano",
+      "mellow"
+    ],
+    "intro": "The Keys Just Know Me. Hands on the keys, eyes closed."
   },
   {
     "id": "homecoming-on-the-moon",
     "title": "Homecoming On The Moon",
-    "seconds": 134
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/homecoming-on-the-moon.mp3",
+    "art": "catalog/covers/homecoming-on-the-moon.jpg",
+    "seconds": 134,
+    "moods": [
+      "dreamy",
+      "space"
+    ],
+    "intro": "Homecoming On The Moon. Long way to come back to."
   },
   {
     "id": "falling-in-love-with-the-light",
     "title": "Falling In Love With The Light",
-    "seconds": 187
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/falling-in-love-with-the-light.mp3",
+    "art": "catalog/covers/falling-in-love-with-the-light.jpg",
+    "seconds": 187,
+    "moods": [
+      "bright",
+      "love"
+    ],
+    "intro": "Falling In Love With The Light. Let it in."
   },
   {
     "id": "hummingbird",
     "title": "Hummingbird",
-    "seconds": 150
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/hummingbird.mp3",
+    "art": "catalog/covers/hummingbird.jpg",
+    "seconds": 150,
+    "moods": [
+      "bright",
+      "upbeat"
+    ],
+    "intro": "Hummingbird. Light and quick, gone before you know it."
   },
   {
     "id": "wildflowers",
     "title": "Wildflowers",
-    "seconds": 187
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/wildflowers.mp3",
+    "art": "catalog/covers/wildflowers.jpg",
+    "seconds": 187,
+    "moods": [
+      "bright",
+      "easy"
+    ],
+    "intro": "Wildflowers. Growing where nobody planted them."
   },
   {
     "id": "kintsugi",
     "title": "Kintsugi",
-    "seconds": 144
+    "artist": "NoBanks Nearby",
+    "audio": "catalog/audio/kintsugi.mp3",
+    "art": "catalog/covers/kintsugi.jpg",
+    "seconds": 144,
+    "moods": [
+      "slow",
+      "piano"
+    ],
+    "intro": "Kintsugi. Broken, mended in gold, better for it."
   }
 ]

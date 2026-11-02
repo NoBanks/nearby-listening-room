@@ -28,6 +28,9 @@ fs.mkdirSync(path.join(OUT, 'audio'), { recursive: true });
 fs.mkdirSync(path.join(OUT, 'covers'), { recursive: true });
 
 const ff = (args) => run('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', ...args], { windowsHide: true, maxBuffer: 1 << 24 });
+// Hand-written fields (moods, intro) survive a rebuild of the catalog.
+const CATALOG = path.join(ROOT, 'src/catalog.json');
+const previous = new Map((fs.existsSync(CATALOG) ? JSON.parse(fs.readFileSync(CATALOG, 'utf8')) : []).map((t) => [t.id, t]));
 const tracks = [];
 for (const title of SHELF) {
   const row = byTitle.get(title.toLowerCase());
@@ -40,8 +43,16 @@ for (const title of SHELF) {
   const jpg = path.join(OUT, 'covers', `${id}.jpg`);
   if (!fs.existsSync(mp3)) await ff(['-i', row[6], '-vn', '-c:a', 'libmp3lame', '-b:a', '192k', '-ar', '44100', mp3]);
   if (!fs.existsSync(jpg)) await ff(['-i', cover, '-vf', 'scale=512:512:flags=lanczos', '-q:v', '3', jpg]);
-  tracks.push({ id, title, seconds: Number(row[1]) });
+  tracks.push({
+    ...previous.get(id),
+    id,
+    title,
+    artist: 'NoBanks Nearby',
+    audio: `catalog/audio/${id}.mp3`,
+    art: `catalog/covers/${id}.jpg`,
+    seconds: Number(row[1]),
+  });
   console.log('ok', title, Math.round(fs.statSync(mp3).size / 1e5) / 10, 'MB');
 }
-fs.writeFileSync(path.join(ROOT, 'src/catalog.json'), `${JSON.stringify(tracks, null, 2)}\n`);
+fs.writeFileSync(CATALOG, `${JSON.stringify(tracks, null, 2)}\n`);
 console.log('done', tracks.length);
