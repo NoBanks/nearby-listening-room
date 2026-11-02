@@ -86,6 +86,9 @@ export class ListeningSystem extends createSystem({
   });
   private voice = new HostVoice(this.audio);
   private started = false;
+  private startedAt = -1;
+  private nudged = false;
+  private everGrabbed = false;
   private sessionRecent: string[] = [];
   private asking = false;
   private radioNear = 0;
@@ -278,6 +281,7 @@ export class ListeningSystem extends createSystem({
   start(): void {
     if (this.started) return;
     this.started = true;
+    this.startedAt = this.now;
     window.setTimeout(() => this.host.onColdStart(this.context()), 1200);
   }
 
@@ -389,6 +393,7 @@ export class ListeningSystem extends createSystem({
   private onGrab(entity: Entity): void {
     const index = this.indexOf(entity);
     this.held = index;
+    this.everGrabbed = true;
     this.records[index].flying = false;
     this.audio.unlock();
     if (index === this.current) this.liftNeedle();
@@ -626,6 +631,11 @@ export class ListeningSystem extends createSystem({
     parts.tonearm.rotation.y = this.armAngle;
 
     // Teaching cue
+    if (!this.hasDropped && !this.nudged && !this.everGrabbed && this.startedAt >= 0 && time - this.startedAt > 25) {
+      // One quiet reminder, only if nothing has happened yet.
+      this.nudged = true;
+      void this.host.say('Reach out and pinch the glowing one.');
+    }
     if (!this.hasDropped) {
       this.cueTime += delta;
       const breathe = 0.5 + 0.5 * Math.sin(this.cueTime * 2.1);

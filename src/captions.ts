@@ -40,7 +40,8 @@ export class Captions {
     this.mesh.name = 'Captions';
     this.mesh.renderOrder = 10;
     this.mesh.raycast = () => {};
-    this.mesh.visible = false;
+    // Hidden through the material: the entity's Visibility component owns mesh.visible.
+    this.material.visible = false;
     this.dom = document.getElementById('caption');
     try {
       this.enabled = localStorage.getItem(STORAGE_KEY) !== 'off';
@@ -83,8 +84,8 @@ export class Captions {
     if (this.hasText && time - this.shownAt > this.holdSeconds) this.clear();
     const target = this.hasText && immersive ? 1 : 0;
     this.material.opacity += (target - this.material.opacity) * Math.min(1, delta * 6);
-    this.mesh.visible = this.material.opacity > 0.01;
-    if (!this.mesh.visible) {
+    this.material.visible = this.material.opacity > 0.01;
+    if (!this.material.visible) {
       this.placed = false;
       return;
     }
