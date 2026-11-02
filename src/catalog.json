@@ -7,10 +7,14 @@
     "art": "catalog/covers/wildflowers.jpg",
     "seconds": 187,
     "moods": [
-      "bright",
-      "easy"
+      "hope",
+      "gentle",
+      "bloom"
     ],
-    "intro": "Wildflowers. Growing where nobody planted them."
+    "intro": "Wildflowers. Growing where nobody planted them.",
+    "cover": "A single orange flower growing under glass, with a big astronaut glove reaching in gently.",
+    "sound": "",
+    "gain": 0.617
   },
   {
     "id": "listening-time",
@@ -20,10 +24,14 @@
     "art": "catalog/covers/listening-time.jpg",
     "seconds": 187,
     "moods": [
-      "mellow",
-      "slow"
+      "listen",
+      "headphones",
+      "focus"
     ],
-    "intro": "Listening Time. Lean back, this one is in no hurry."
+    "intro": "Listening Time. Headphones on, nowhere to be.",
+    "cover": "An astronaut with headphones on, sitting on a bench, the title glowing behind.",
+    "sound": "",
+    "gain": 0.676
   },
   {
     "id": "warm-tape",
@@ -33,10 +41,18 @@
     "art": "catalog/covers/warm-tape.jpg",
     "seconds": 133,
     "moods": [
+      "lofi",
+      "guitar",
       "warm",
-      "lofi"
+      "nostalgic",
+      "rainy",
+      "chill",
+      "calm"
     ],
-    "intro": "Warm Tape. A little hiss, a lot of heart."
+    "intro": "Warm Tape. A wall of cassettes and a guitar that remembers.",
+    "cover": "An astronaut in orange at a wall of cassettes, holding one up, a boombox below.",
+    "sound": "Lofi hip hop instrumental. Soulful vintage guitar melodies over a boom bap beat, vinyl crackle, warm tape feel.",
+    "gain": 0.832
   },
   {
     "id": "downtown-nightlight",
@@ -46,10 +62,14 @@
     "art": "catalog/covers/downtown-nightlight.jpg",
     "seconds": 190,
     "moods": [
+      "city",
       "night",
-      "city"
+      "late"
     ],
-    "intro": "Downtown Nightlight. The city is still awake, and so are we."
+    "intro": "Downtown Nightlight. The city's still awake, and so are we.",
+    "cover": "An astronaut sitting on a rooftop above a city at night, the title written in stars.",
+    "sound": "",
+    "gain": 0.596
   },
   {
     "id": "cafe-opens-at-midnight",
@@ -59,10 +79,15 @@
     "art": "catalog/covers/cafe-opens-at-midnight.jpg",
     "seconds": 133,
     "moods": [
+      "coffee",
+      "midnight",
       "night",
-      "jazz"
+      "late"
     ],
-    "intro": "Cafe Opens At Midnight. Corner table's open."
+    "intro": "Cafe Opens At Midnight. Corner table's open.",
+    "cover": "An astronaut barista pouring coffee at a counter, a neon sign, stars out the window.",
+    "sound": "",
+    "gain": 0.603
   },
   {
     "id": "the-long-drive-home",
@@ -73,9 +98,19 @@
     "seconds": 130,
     "moods": [
       "drive",
-      "mellow"
+      "sad",
+      "melancholy",
+      "piano",
+      "rainy",
+      "late",
+      "night",
+      "calm",
+      "chill"
     ],
-    "intro": "The Long Drive Home. Windows down, no traffic."
+    "intro": "The Long Drive Home. Just you and the dashboard glow.",
+    "cover": "An astronaut at the wheel, seen from the back seat, a city glowing through the windshield.",
+    "sound": "Atmospheric lofi instrumental. Melancholic electric piano over a soft beat. Made for a late night drive or a rainy day.",
+    "gain": 0.767
   },
   {
     "id": "lets-stay-in-tonight",
@@ -86,9 +121,16 @@
     "seconds": 150,
     "moods": [
       "cozy",
-      "slow"
+      "soul",
+      "home",
+      "keys",
+      "night",
+      "late"
     ],
-    "intro": "Let's Stay In Tonight. Good call."
+    "intro": "Let's Stay In Tonight. Good call.",
+    "cover": "An astronaut lying on a rug, surrounded by records, books, a guitar, pizza and string lights.",
+    "sound": "Soulful boom bap instrumental. Jazzy keyboard progression, vinyl grit, quiet night in energy.",
+    "gain": 0.759
   },
   {
     "id": "on-a-different-frequency",
@@ -98,9 +140,15 @@
     "art": "catalog/covers/on-a-different-frequency.jpg",
     "seconds": 146,
     "moods": [
-      "dreamy"
+      "strange",
+      "weird",
+      "static",
+      "tv"
     ],
-    "intro": "On A Different Frequency. Tune in close."
+    "intro": "On A Different Frequency. Tune in close.",
+    "cover": "An astronaut sitting in a room stacked with old TVs, most of them showing static.",
+    "sound": "",
+    "gain": 0.668
   },
   {
     "id": "velvet-and-brass",
@@ -111,9 +159,17 @@
     "seconds": 183,
     "moods": [
       "jazz",
-      "brass"
+      "brass",
+      "soul",
+      "trumpet",
+      "night",
+      "late",
+      "cinematic"
     ],
-    "intro": "Velvet and Brass. Dress up for this one."
+    "intro": "Velvet and Brass. Curtain's up.",
+    "cover": "A black silhouette playing a trumpet in front of a red velvet curtain.",
+    "sound": "Cinematic jazzy hip hop instrumental. Cool and soulful, for a lonely walk home through the city.",
+    "gain": 0.741
   },
   {
     "id": "junkyard-jazz",
@@ -124,9 +180,13 @@
     "seconds": 176,
     "moods": [
       "jazz",
-      "upbeat"
+      "horns",
+      "moon"
     ],
-    "intro": "Junkyard Jazz. Beautiful noise from the scrap pile."
+    "intro": "Junkyard Jazz. Beautiful noise from the scrap pile.",
+    "cover": "An astronaut on a scrap heap of old horns under a full moon, a battered sax in front.",
+    "sound": "",
+    "gain": 0.631
   },
   {
     "id": "the-keys-just-know-me",
@@ -137,9 +197,16 @@
     "seconds": 185,
     "moods": [
       "piano",
-      "mellow"
+      "keys",
+      "late",
+      "night",
+      "thinking",
+      "introspective"
     ],
-    "intro": "The Keys Just Know Me. Hands on the keys, eyes closed."
+    "intro": "The Keys Just Know Me. Hands on the keys, eyes closed.",
+    "cover": "Black and white. A gloved astronaut hand resting on the keys of an upright piano.",
+    "sound": "Cinematic lofi instrumental. Atmospheric synth pad, clean introspective keyboard melody. A musician alone with the instrument late at night.",
+    "gain": 0.617
   },
   {
     "id": "falling-in-love-with-the-light",
@@ -149,10 +216,14 @@
     "art": "catalog/covers/falling-in-love-with-the-light.jpg",
     "seconds": 187,
     "moods": [
-      "bright",
-      "love"
+      "love",
+      "light",
+      "hope"
     ],
-    "intro": "Falling In Love With The Light. Let it in."
+    "intro": "Falling In Love With The Light. Let it in.",
+    "cover": "An astronaut watching the northern lights over water, the title written in the aurora.",
+    "sound": "",
+    "gain": 0.813
   },
   {
     "id": "hummingbird",
@@ -162,10 +233,20 @@
     "art": "catalog/covers/hummingbird.jpg",
     "seconds": 150,
     "moods": [
-      "bright",
-      "upbeat"
+      "focus",
+      "jazz",
+      "guitar",
+      "blues",
+      "rainy",
+      "late",
+      "night",
+      "chill",
+      "mellow"
     ],
-    "intro": "Hummingbird. Light and quick, gone before you know it."
+    "intro": "Hummingbird. Slow down and catch it.",
+    "cover": "A bright hummingbird hovering by an astronaut, who is writing in an open book.",
+    "sound": "Jazzy lofi instrumental. Warm keys, a chilled beat, and a soulful bluesy guitar solo. For late night focus or a rainy day.",
+    "gain": 1
   },
   {
     "id": "kintsugi",
@@ -175,9 +256,14 @@
     "art": "catalog/covers/kintsugi.jpg",
     "seconds": 144,
     "moods": [
-      "slow",
-      "piano"
+      "healing",
+      "broken",
+      "gold",
+      "mended"
     ],
-    "intro": "Kintsugi. Broken, mended in gold, better for it."
+    "intro": "Kintsugi. Broken, mended in gold, better for it.",
+    "cover": "A close up of a cracked astronaut visor, the cracks glowing like molten gold.",
+    "sound": "",
+    "gain": 0.716
   }
 ]

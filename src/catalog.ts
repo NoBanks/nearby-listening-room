@@ -17,6 +17,12 @@ export interface Track {
   moods?: string[];
   /** One short line the scripted host says when the needle drops. */
   intro?: string;
+  /** What is on the sleeve, from looking at it. */
+  cover?: string;
+  /** What the record sounds like, from the artist's own notes. Empty: unknown, so the host must not describe it. */
+  sound?: string;
+  /** Playback level that brings this master to the shelf's common loudness. */
+  gain?: number;
 }
 
 export const TRACKS: readonly Track[] = raw as Track[];

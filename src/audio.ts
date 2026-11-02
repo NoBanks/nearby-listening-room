@@ -9,6 +9,9 @@ export class RoomAudio {
 
   private ctx: AudioContext | null = null;
   private gain: GainNode | null = null;
+  /** Evens out loudness between masters. */
+  private trim: GainNode | null = null;
+  private trimLevel = 1;
   /** Dips the music while the host talks. */
   private duckGain: GainNode | null = null;
   private center: PannerNode | null = null;
@@ -39,13 +42,17 @@ export class RoomAudio {
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.75;
+    const trim = ctx.createGain();
+    trim.gain.value = this.trimLevel;
     const duck = ctx.createGain();
     const splitter = ctx.createChannelSplitter(2);
     const sides = ctx.createGain();
     sides.gain.value = 0.7;
     const middle = ctx.createGain();
     middle.gain.value = 0.55;
-    source.connect(gain);
+    source.connect(trim);
+    trim.connect(gain);
+    this.trim = trim;
     gain.connect(analyser);
     gain.connect(duck);
     duck.connect(sides);
@@ -167,7 +174,7 @@ export class RoomAudio {
     listener.upZ.value = uz;
   }
 
-  play(url: string, delaySeconds: number): void {
+  play(url: string, delaySeconds: number, level = 1): void {
     window.clearTimeout(this.stopTimer);
     // The outgoing record fades under the needle lift; the new one starts after it.
     const ctx = this.ctx;
@@ -178,6 +185,8 @@ export class RoomAudio {
     this.stopTimer = window.setTimeout(() => {
       this.element.src = url;
       this.element.currentTime = 0;
+      this.trimLevel = level;
+      if (this.trim) this.trim.gain.value = level;
       this.resume();
     }, delaySeconds * 1000);
   }

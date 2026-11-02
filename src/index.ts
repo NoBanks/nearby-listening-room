@@ -1,5 +1,7 @@
 import { World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
+import { hostEndpoint } from './host/create-host.js';
+import { HostMic } from './host/mic.js';
 import { ListeningSystem } from './listening-system.js';
 
 World.create(
@@ -14,6 +16,16 @@ World.create(
   const flat = document.getElementById('flat') as HTMLButtonElement;
   enter.disabled = false;
   flat.disabled = false;
+
+  // Optional and off until asked for: the permission prompt only works out here.
+  const micRow = document.getElementById('microw')!;
+  const mic = document.getElementById('mic') as HTMLButtonElement;
+  micRow.hidden = !(hostEndpoint && HostMic.supported && navigator.xr);
+  mic.addEventListener('click', async () => {
+    const on = await room.mic.enable();
+    mic.textContent = on ? 'The host can hear you when you hold the radio' : 'No microphone. You can still pinch the radio.';
+    mic.disabled = true;
+  });
 
   const flatbar = document.getElementById('flatbar') as HTMLFormElement;
   const ask = document.getElementById('ask') as HTMLInputElement;

@@ -38,8 +38,11 @@ import {
 import { Captions } from './captions.js';
 import { PalmGesture } from './hand-gestures.js';
 import { featuredTrack, ListeningHistory, shelfOrder } from './history.js';
-import { createHost } from './host/create-host.js';
-import type { HostContext, RadioHost } from './host/host.js';
+import { CloudHost } from './host/cloud-host.js';
+import { createHost, hostEndpoint } from './host/create-host.js';
+import type { HostContext, HostReply, RadioHost } from './host/host.js';
+import { LINES } from './host/lines.js';
+import { HostMic } from './host/mic.js';
 import { HostVoice } from './host/voice.js';
 import { RadioHit, Sleeve, SleeveHit, TonearmHit } from './sleeve-component.js';
 import { glowTexture, placeholderCoverTexture } from './textures.js';
@@ -61,6 +64,8 @@ const DIM = 0.13;
 const NEAR = 0.16;
 const TONEARM_PINCH = 0.075;
 const RADIO_PINCH = 0.13;
+/** Holding the radio longer than this means the listener is talking to it. */
+const TALK_MIN_SECONDS = 0.5;
 
 interface RecordState {
   entity: Entity;
@@ -88,9 +93,13 @@ export class ListeningSystem extends createSystem({
   readonly captions = new Captions();
   readonly host: RadioHost = createHost({
     caption: (text) => this.captions.show(text),
-    speak: (text, audioUrl) => this.voice.speak(text, audioUrl),
+    speak: (text, audioUrl, backup) => this.voice.speak(text, audioUrl, backup),
   });
-  private voice = new HostVoice(this.audio);
+  private voice = new HostVoice(this.audio, hostEndpoint ? `${hostEndpoint}/speak` : undefined);
+  readonly mic = new HostMic();
+  /** A hand is holding the radio, and how long for. */
+  private talkingSource: XRInputSource | null = null;
+  private talkStart = 0;
   readonly history = new ListeningHistory();
   /** Catalog index of tonight's featured record: the one that glows. */
   private featured = 0;
@@ -183,11 +192,18 @@ export class ListeningSystem extends createSystem({
       if (!event.inputSource.hand || (side !== 'left' && side !== 'right')) return;
       this.player.indexTipSpaces[side].getWorldPosition(this.tmpTip);
       if (this.distanceToArm(this.tmpTip) < TONEARM_PINCH) this.onTonearm();
-      else if (this.tmpTip.distanceTo(this.radioPos) < RADIO_PINCH) this.onRadio();
+      else if (this.tmpTip.distanceTo(this.radioPos) < RADIO_PINCH) {
+        if (this.mic.ready && this.host.onSpoken) this.startTalking(event.inputSource);
+        else this.onRadio();
+      }
+    };
+    const onSelectEnd = (event: XRInputSourceEvent) => {
+      if (event.inputSource === this.talkingSource) void this.stopTalking();
     };
     const onSession = () => {
       const session = this.world.renderer.xr.getSession();
       session?.addEventListener('selectstart', onSelectStart);
+      session?.addEventListener('selectend', onSelectEnd);
       session?.addEventListener('squeezestart', unlock);
     };
     this.world.renderer.xr.addEventListener('sessionstart', onSession);
@@ -316,7 +332,49 @@ export class ListeningSystem extends createSystem({
       totalPlays: this.history.totalPlays,
       recent: this.history.recentIds(),
       hour: new Date().getHours(),
+      playing: TRACKS[this.current]?.id,
+      paused: this.paused,
     };
+  }
+
+  /** Hold the radio to talk. Letting go quickly is a plain pinch: the host picks. */
+  private startTalking(source: XRInputSource): void {
+    if (this.held >= 0 || this.asking) return;
+    this.talkingSource = source;
+    this.talkStart = this.now;
+    this.mic.start();
+    this.audio.duck(true);
+  }
+
+  private async stopTalking(): Promise<void> {
+    this.talkingSource = null;
+    const heldFor = this.now - this.talkStart;
+    const clip = await this.mic.stop();
+    this.audio.duck(false);
+    if (heldFor < TALK_MIN_SECONDS || !clip || !this.host.onSpoken) {
+      this.onRadio();
+      return;
+    }
+    if (this.asking) return;
+    this.asking = true;
+    try {
+      this.captions.show('...');
+      const reply = await this.host.onSpoken(clip, this.context());
+      this.act(reply ?? (await this.host.onRequest('surprise me', this.context())));
+    } finally {
+      this.asking = false;
+    }
+  }
+
+  /** Carries out what the host decided. The record moves first, the words follow. */
+  private act(reply: HostReply): void {
+    if (reply.action === 'pause' && this.current >= 0 && !this.paused) this.togglePause();
+    if (reply.action === 'resume' && this.current >= 0 && this.paused) this.togglePause();
+    if (reply.play) {
+      const index = TRACKS.findIndex((t) => t.id === reply.play);
+      if (index >= 0 && index !== this.current) this.load(index, false);
+    }
+    if (reply.line) void this.host.say(reply.line, undefined, this.host instanceof CloudHost ? this.host.backupFor(reply) : undefined);
   }
 
   /** Pinch the radio: the host chooses a record and puts it on. */
@@ -332,14 +390,7 @@ export class ListeningSystem extends createSystem({
     if (this.asking) return;
     this.asking = true;
     try {
-      const reply = await this.host.onRequest(text, this.context());
-      if (reply.line) void this.host.say(reply.line);
-      if (reply.action === 'pause' && this.current >= 0 && !this.paused) this.togglePause();
-      if (reply.action === 'resume' && this.current >= 0 && this.paused) this.togglePause();
-      if (reply.play) {
-        const index = TRACKS.findIndex((t) => t.id === reply.play);
-        if (index >= 0 && index !== this.current) this.load(index, false);
-      }
+      this.act(await this.host.onRequest(text, this.context()));
     } finally {
       this.asking = false;
     }
@@ -482,7 +533,7 @@ export class ListeningSystem extends createSystem({
     vinyl.visible = true;
     plaque.draw(track.title);
     powerLed.color.set(0xff5a28);
-    this.audio.play(resolveUrl(track.audio), NEEDLE_DELAY);
+    this.audio.play(resolveUrl(track.audio), NEEDLE_DELAY, track.gain);
     this.noteStart(track, announce);
     if (!this.hasDropped) {
       this.hasDropped = true;
@@ -520,7 +571,10 @@ export class ListeningSystem extends createSystem({
     this.liftNeedle();
     if (finished >= 0) {
       this.flyHome(finished);
-      this.host.onTrackEnd(TRACKS[finished], this.context());
+      void this.host.onTrackEnd(TRACKS[finished], this.context()).then((reply) => {
+        // Someone may have put a record on while the host was thinking.
+        if (this.current < 0 && this.held < 0) this.act(reply);
+      });
     }
   }
 
@@ -669,7 +723,7 @@ export class ListeningSystem extends createSystem({
     if (!this.hasDropped && !this.nudged && !this.everGrabbed && this.startedAt >= 0 && time - this.startedAt > 25) {
       // One quiet reminder, only if nothing has happened yet.
       this.nudged = true;
-      void this.host.say('Reach out and pinch the glowing one.');
+      void this.host.say(LINES.nudge);
     }
     if (!this.hasDropped) {
       this.cueTime += delta;
