@@ -129,7 +129,8 @@ export class ListeningSystem extends createSystem({
     const geometry = new BoxGeometry(SLEEVE_SIZE, SLEEVE_SIZE, 0.006);
     const side = new MeshBasicMaterial({ color: 0x120c08 });
     const hitGeometry = new PlaneGeometry(SLEEVE_SIZE, SLEEVE_SIZE);
-    const hitMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    // Never drawn (no draw call) but still answers rays and clicks.
+    const hitMaterial = new MeshBasicMaterial({ visible: false });
     catalog.forEach((track, index) => {
       const texture = AssetManager.getTexture(`cover-${track.id}`)!;
       texture.colorSpace = SRGBColorSpace;
