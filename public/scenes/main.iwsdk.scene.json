@@ -1,0 +1,18 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [0.012, 0.012, 0.02, 1],
+      "equator": [0.018, 0.016, 0.024, 1],
+      "ground": [0.008, 0.007, 0.008, 1],
+      "dither": true
+    }
+  },
+  "environment": {
+    "toneMapping": "none",
+    "shadows": false
+  },
+  "resources": {},
+  "nodes": []
+}
