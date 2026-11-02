@@ -5,6 +5,7 @@ import {
   createSystem,
   Entity,
   Grabbed,
+  Hovered,
   Mesh,
   MeshBasicMaterial,
   OneHandGrabbable,
@@ -13,6 +14,8 @@ import {
   Quaternion,
   RayInteractable,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   SRGBColorSpace,
   Vector3,
   VisibilityState,
@@ -30,7 +33,8 @@ import {
   SPEAKER_R,
   STAND,
 } from './room.js';
-import { Sleeve, SleeveHit } from './sleeve-component.js';
+import { PalmGesture } from './hand-gestures.js';
+import { Sleeve, SleeveHit, TonearmHit } from './sleeve-component.js';
 import { glowTexture, placeholderCoverTexture } from './textures.js';
 
 const ROWS = [1.265, 1.045];
@@ -42,6 +46,9 @@ const ARM_END = -0.62;
 const RPM_33 = (33.33 / 60) * Math.PI * 2;
 const NEEDLE_DELAY = 0.9;
 const DIM = 0.13;
+/** A fingertip this close to a sleeve or the tonearm lights it up. */
+const NEAR = 0.16;
+const TONEARM_PINCH = 0.075;
 
 interface RecordState {
   entity: Entity;
@@ -59,6 +66,9 @@ export class ListeningSystem extends createSystem({
   sleeves: { required: [Sleeve] },
   grabbed: { required: [Sleeve, Grabbed] },
   pressed: { required: [SleeveHit, Pressed] },
+  hovered: { required: [SleeveHit, Hovered] },
+  armPressed: { required: [TonearmHit, Pressed] },
+  armHovered: { required: [TonearmHit, Hovered] },
 }) {
   readonly audio = new RoomAudio();
 
@@ -84,6 +94,15 @@ export class ListeningSystem extends createSystem({
   private fingerB!: Mesh;
   private cueTime = 0;
 
+  private handHalos: Mesh[] = [];
+  private handHaloMaterials: MeshBasicMaterial[] = [];
+  private armHit!: Mesh;
+  private armGlow!: Sprite;
+  private lastArmToggle = -10;
+  private palm = new PalmGesture();
+  private tmpTip = new Vector3();
+  private tmpArm = new Vector3();
+
   private standPos = new Vector3();
   private standQuat = new Quaternion();
   private platterPos = new Vector3();
@@ -99,12 +118,14 @@ export class ListeningSystem extends createSystem({
     this.world.createTransformEntity(this.parts.root);
     this.buildRecords();
     this.buildCue();
+    this.buildAffordances();
     this.placeInWorld();
 
     this.cleanupFuncs.push(
       this.queries.grabbed.subscribe('qualify', (entity) => this.onGrab(entity)),
       this.queries.grabbed.subscribe('disqualify', (entity) => this.onRelease(entity)),
       this.queries.pressed.subscribe('disqualify', (entity) => this.onPress(entity)),
+      this.queries.armPressed.subscribe('disqualify', () => this.onTonearm()),
       this.world.visibilityState.subscribe((state) => this.onVisibility(state)),
     );
 
@@ -114,9 +135,17 @@ export class ListeningSystem extends createSystem({
 
     // Any pinch counts as the gesture browsers require before sound can start.
     const unlock = () => this.audio.unlock();
+    // A pinch right at the tonearm pauses or resumes, with either hand.
+    const onSelectStart = (event: XRInputSourceEvent) => {
+      unlock();
+      const side = event.inputSource.handedness;
+      if (!event.inputSource.hand || (side !== 'left' && side !== 'right')) return;
+      this.player.indexTipSpaces[side].getWorldPosition(this.tmpTip);
+      if (this.distanceToArm(this.tmpTip) < TONEARM_PINCH) this.onTonearm();
+    };
     const onSession = () => {
       const session = this.world.renderer.xr.getSession();
-      session?.addEventListener('selectstart', unlock);
+      session?.addEventListener('selectstart', onSelectStart);
       session?.addEventListener('squeezestart', unlock);
     };
     this.world.renderer.xr.addEventListener('sessionstart', onSession);
@@ -184,6 +213,55 @@ export class ListeningSystem extends createSystem({
     first.add(this.fingerA, this.fingerB);
   }
 
+  /** Glows that answer a nearby hand, plus the tonearm's pinch target. */
+  private buildAffordances(): void {
+    const glow = glowTexture('255,206,150');
+    const plane = new PlaneGeometry(SLEEVE_SIZE * 1.9, SLEEVE_SIZE * 1.9);
+    for (let i = 0; i < 2; i++) {
+      const material = new MeshBasicMaterial({
+        map: glow,
+        transparent: true,
+        opacity: 0,
+        blending: AdditiveBlending,
+        depthWrite: false,
+      });
+      const halo = new Mesh(plane, material);
+      halo.position.z = -0.005;
+      halo.raycast = () => {};
+      halo.visible = false;
+      this.handHalos.push(halo);
+      this.handHaloMaterials.push(material);
+    }
+    this.armGlow = new Sprite(
+      new SpriteMaterial({ map: glow, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }),
+    );
+    this.armGlow.scale.setScalar(0.11);
+    this.armGlow.raycast = () => {};
+    this.parts.root.add(this.armGlow);
+    this.armHit = new Mesh(new BoxGeometry(0.07, 0.06, 0.32), new MeshBasicMaterial({ visible: false }));
+    this.armHit.name = 'Tonearm';
+    const entity = this.world.createTransformEntity(this.armHit);
+    entity.addComponent(TonearmHit);
+    entity.addComponent(RayInteractable);
+  }
+
+  private distanceToArm(point: Vector3): number {
+    // Closest of the headshell and the middle of the arm.
+    const { tonearm, headshell } = this.parts;
+    headshell.getWorldPosition(this.tmpArm);
+    const toHead = this.tmpArm.distanceTo(point);
+    tonearm.localToWorld(this.tmpArm.set(0, 0.046, 0.12));
+    return Math.min(toHead, this.tmpArm.distanceTo(point));
+  }
+
+  /** Pinch or click on the tonearm: pause, or pick the song back up. */
+  private onTonearm(): void {
+    if (this.now - this.lastArmToggle < 0.5 || this.held >= 0) return;
+    this.lastArmToggle = this.now;
+    this.audio.unlock();
+    if (this.current >= 0) this.togglePause();
+  }
+
   /** Sits the room around the viewer's real head, so it fits any seat height. */
   private placeInWorld(): void {
     const { root } = this.parts;
@@ -241,8 +319,18 @@ export class ListeningSystem extends createSystem({
     this.held = -1;
     this.lastGrabEnd = this.now;
     const record = this.records[index];
-    if (record.mesh.position.distanceTo(this.platterPos) < PLATTER.dropRadius) this.load(index);
+    const over = this.isOverPlatter(record.mesh.position);
+    if (import.meta.env.DEV) console.info(`[room] release ${index} over platter: ${over}`);
+    if (over) this.load(index);
     else this.flyHome(index);
+  }
+
+  /** Anywhere in a column above the platter counts: a forgiving target for a loose hand. */
+  private isOverPlatter(point: Vector3): boolean {
+    const dx = point.x - this.platterPos.x;
+    const dz = point.z - this.platterPos.z;
+    const dy = point.y - this.platterPos.y;
+    return dx * dx + dz * dz < PLATTER.dropRadius * PLATTER.dropRadius && dy > -0.08 && dy < 0.4;
   }
 
   /** A pinch aimed from a distance: same result as carrying the record over. */
@@ -290,6 +378,7 @@ export class ListeningSystem extends createSystem({
 
   private togglePause(): void {
     this.paused = !this.paused;
+    if (import.meta.env.DEV) console.info(`[room] ${this.paused ? 'pause' : 'resume'}`);
     if (this.paused) this.audio.fadeOutThenPause();
     else this.audio.resume();
   }
@@ -338,6 +427,65 @@ export class ListeningSystem extends createSystem({
       record.mesh.position.copy(this.standPos);
       record.mesh.quaternion.copy(this.standQuat);
     }
+  }
+
+  private updateAffordances(delta: number): void {
+    const xr = this.world.renderer.xr;
+    const presenting = xr.isPresenting;
+    const fade = Math.min(1, delta * 12);
+    let armNear = 0;
+    for (let h = 0; h < 2; h++) {
+      let target = -1;
+      let strength = 0;
+      if (presenting) {
+        this.player.indexTipSpaces[h === 0 ? 'left' : 'right'].getWorldPosition(this.tmpTip);
+        armNear = Math.max(armNear, 1 - this.distanceToArm(this.tmpTip) / NEAR);
+        if (this.held < 0) {
+          let best = NEAR;
+          for (let i = 0; i < this.records.length; i++) {
+            const d = this.records[i].mesh.position.distanceTo(this.tmpTip);
+            if (d < best) {
+              best = d;
+              target = i;
+            }
+          }
+          strength = 1 - best / NEAR;
+        }
+      } else if (h === 0 && this.held < 0) {
+        // Mouse hover in the flat view gets the same glow.
+        for (const entity of this.queries.hovered.entities) {
+          target = entity.getValue(SleeveHit, 'trackIndex') as number;
+          strength = 1;
+          break;
+        }
+      }
+      const halo = this.handHalos[h];
+      const material = this.handHaloMaterials[h];
+      if (target >= 0 && halo.parent !== this.records[target].mesh) {
+        this.records[target].mesh.add(halo);
+        material.opacity = 0;
+      }
+      halo.visible = target >= 0 || material.opacity > 0.01;
+      material.opacity += ((target >= 0 ? 0.35 + 0.65 * strength : 0) - material.opacity) * fade;
+    }
+    if (!presenting && this.queries.armHovered.entities.size > 0) armNear = 1;
+
+    // Open palm, either hand: pause or resume.
+    if (presenting) {
+      this.world.camera.getWorldPosition(this.tmpV);
+      this.player.updateMatrixWorld();
+      if (this.palm.update(delta, xr.getFrame(), xr.getReferenceSpace(), this.player.matrixWorld, this.tmpV) && this.current >= 0) {
+        this.togglePause();
+      }
+    }
+
+    const armMaterial = this.armGlow.material as SpriteMaterial;
+    const armTarget = this.current >= 0 ? Math.max(Math.max(0, armNear), this.palm.progress) * 0.9 : 0;
+    armMaterial.opacity += (armTarget - armMaterial.opacity) * fade;
+    this.parts.headshell.getWorldPosition(this.armGlow.position);
+    this.parts.root.worldToLocal(this.armGlow.position);
+    this.parts.tonearm.localToWorld(this.armHit.position.set(0, 0.046, 0.12));
+    this.parts.tonearm.getWorldQuaternion(this.armHit.quaternion);
   }
 
   update(delta: number, time: number): void {
@@ -402,11 +550,13 @@ export class ListeningSystem extends createSystem({
     // The ring around the platter answers a record in the hand.
     let ring = 0;
     if (this.held >= 0) {
-      const near = this.records[this.held].mesh.position.distanceTo(this.platterPos) < PLATTER.dropRadius;
+      const near = this.isOverPlatter(this.records[this.held].mesh.position);
       ring = near ? 0.95 : 0.3 + 0.2 * Math.sin(time * 4);
     }
     const ringMaterial = parts.dropRing.material as MeshBasicMaterial;
     ringMaterial.opacity += (ring - ringMaterial.opacity) * Math.min(1, delta * 10);
+
+    this.updateAffordances(delta);
 
     // Records in flight
     const ease = 1 - Math.exp(-delta * 7);

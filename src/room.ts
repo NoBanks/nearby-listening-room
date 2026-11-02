@@ -59,6 +59,8 @@ export interface RoomParts {
   vinylLabel: MeshBasicMaterial;
   platter: Mesh;
   tonearm: Group;
+  /** The cartridge end of the arm: where a fingertip pinches to pause. */
+  headshell: Mesh;
   dropRing: Mesh;
   windowBase: MeshBasicMaterial;
   windowPulse: MeshBasicMaterial;
@@ -361,6 +363,7 @@ export function buildRoom(): RoomParts {
     vinylLabel,
     platter,
     tonearm,
+    headshell,
     dropRing,
     windowBase,
     windowPulse,
