@@ -348,6 +348,12 @@ export class ListeningSystem extends createSystem({
     return Math.min(toHead, this.tmpArm.distanceTo(point));
   }
 
+  /** Keyboard and other non-hand controls: pause or resume what is on the platter. */
+  togglePlayback(): void {
+    if (this.current >= 0) this.togglePause();
+    else void this.host.say('Nothing on the turntable yet. Click a record, or press H and I will pick one.');
+  }
+
   /** Pinch or click on the tonearm: pause, or pick the song back up. */
   private onTonearm(): void {
     if (this.now - this.lastArmToggle < 0.5 || this.held >= 0) return;

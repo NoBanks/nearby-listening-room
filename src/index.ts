@@ -53,6 +53,27 @@ World.create(
   });
   world.renderer.xr.addEventListener('sessionstart', () => flatbar.classList.remove('on'));
 
+  // Flat view keys: Space pauses or resumes, H asks the host to pick, C toggles captions.
+  window.addEventListener('keydown', (event) => {
+    if (event.target instanceof HTMLInputElement || !landing.classList.contains('gone')) return;
+    if (world.renderer.xr.isPresenting) return;
+    room.audio.unlock();
+    if (event.code === 'Space') {
+      event.preventDefault();
+      room.togglePlayback();
+    } else if (event.key === 'h' || event.key === 'H') {
+      void room.ask('surprise me');
+    } else if (event.key === 'c' || event.key === 'C') {
+      cc.click();
+    }
+  });
+
+  // ?flat skips the landing card and opens the flat view, for quick checks.
+  if (new URLSearchParams(location.search).has('flat')) {
+    leave();
+    flatbar.classList.add('on');
+  }
+
   void navigator.xr?.isSessionSupported('immersive-vr').then((supported) => {
     if (!supported) enter.hidden = true;
   });

@@ -18,6 +18,7 @@
       #landing.gone { opacity: 0; pointer-events: none; }
       h1 { margin: 0; font-weight: 400; font-size: clamp(30px, 6vw, 58px); letter-spacing: 0.02em; }
       p { margin: 0; font-size: clamp(15px, 2.2vw, 20px); color: #b59a7c; font-style: italic; }
+      p.small { font-size: 14px; font-style: normal; opacity: 0.8; }
       .row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
       button {
         font: inherit; font-size: 20px; padding: 16px 36px; border-radius: 999px; cursor: pointer;
@@ -51,6 +52,7 @@
     <div id="landing">
       <h1>Nearby Listening Room</h1>
       <p>Sit down. Bring your hands. The music of NoBanks Nearby.</p>
+      <p class="small">On this screen: click a record to play it. Space pauses, H lets the host pick.</p>
       <div class="row">
         <button id="enter" disabled>Enter the room</button>
         <button id="flat" class="ghost" disabled>Listen on this screen</button>
