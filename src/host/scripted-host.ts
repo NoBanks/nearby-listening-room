@@ -32,7 +32,8 @@ export class ScriptedHost implements RadioHost {
 
   onColdStart(context: HostContext): void {
     if (context.firstVisit) {
-      const greeting = partOfNight(context.hour) === 'late' ? 'Late one, huh.' : 'Evening.';
+      const part = partOfNight(context.hour);
+      const greeting = part === 'late' ? 'Late one, huh.' : part === 'evening' ? 'Evening.' : 'Hey there.';
       void this.say(`${greeting} Pinch the glowing record and set it on the turntable.`);
       return;
     }

@@ -13,10 +13,10 @@ const OUT = path.join(ROOT, 'public/catalog');
 
 // First entry is the record that teaches the room.
 const SHELF = [
-  'Just A Pinch', 'Listening Time', 'Warm Tape', 'Downtown Nightlight',
+  'Wildflowers', 'Listening Time', 'Warm Tape', 'Downtown Nightlight',
   'Cafe Opens At Midnight', 'The Long Drive Home', "Let's Stay In Tonight", 'On A Different Frequency',
-  'Velvet & Brass', 'Junkyard Jazz', 'The Keys Just Know Me', 'Homecoming On The Moon',
-  'Falling In Love With The Light', 'Hummingbird', 'Wildflowers', 'Kintsugi',
+  'Velvet & Brass', 'Junkyard Jazz', 'The Keys Just Know Me',
+  'Falling In Love With The Light', 'Hummingbird', 'Kintsugi',
 ];
 
 const parseLine = (line) => [...line.matchAll(/"((?:[^"]|"")*)"/g)].map((m) => m[1].replace(/""/g, '"'));

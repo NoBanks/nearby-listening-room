@@ -102,6 +102,8 @@ export function nightNumber(date: Date): number {
  * listener always finds something new glowing.
  */
 export function featuredTrack(tracks: readonly Track[], date: Date, lastPlayed?: string): Track {
+  // A first visit always opens on the record chosen to teach the room.
+  if (!lastPlayed) return tracks[0];
   let h = nightNumber(date) * 2654435761;
   h = (h ^ (h >>> 16)) >>> 0;
   let index = h % tracks.length;

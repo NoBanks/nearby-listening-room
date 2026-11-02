@@ -38,7 +38,7 @@ IWER is IWSDK's in-browser XR emulator. The dev server injects it automatically 
    ```
    npx @iwsdk/cli xr enter --input-json '{}'
    npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}'
-   npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Just A Pinch","approach":{"distance":0.06},"pinch":{"value":1,"at":"arrival"}},{"target":"Tonearm","depart":{"distance":0.08}},{"pinch":0,"duration":0.2}]}'
+   npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Wildflowers","approach":{"distance":0.06},"pinch":{"value":1,"at":"arrival"}},{"target":"Tonearm","depart":{"distance":0.08}},{"pinch":0,"duration":0.2}]}'
    npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-left","steps":[{"target":"Radio","pinch":{"value":1,"at":"arrival"}},{"pinch":0,"duration":0.2}]}'
    ```
 
@@ -66,14 +66,14 @@ Everything about a record lives in `src/catalog.json`. Changing records is a dat
 
 ```json
 {
-  "id": "just-a-pinch",
-  "title": "Just A Pinch",
+  "id": "wildflowers",
+  "title": "Wildflowers",
   "artist": "NoBanks Nearby",
-  "audio": "catalog/audio/just-a-pinch.mp3",
-  "art": "catalog/covers/just-a-pinch.jpg",
-  "seconds": 158,
-  "moods": ["easy", "warm"],
-  "intro": "Just A Pinch. That is all it ever takes."
+  "audio": "catalog/audio/wildflowers.mp3",
+  "art": "catalog/covers/wildflowers.jpg",
+  "seconds": 187,
+  "moods": ["bright", "easy"],
+  "intro": "Wildflowers. Growing where nobody planted them."
 }
 ```
 

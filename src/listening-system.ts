@@ -5,6 +5,7 @@ import {
   createSystem,
   Entity,
   Grabbed,
+  Group,
   Hovered,
   Mesh,
   MeshBasicMaterial,
@@ -121,6 +122,8 @@ export class ListeningSystem extends createSystem({
   private settleFrames = 0;
   private wasImmersive = false;
 
+  private cue!: Group;
+  private handHaloTarget = [-1, -1];
   private halo!: Mesh;
   private haloMaterial!: MeshBasicMaterial;
   private fingerA!: Mesh;
@@ -232,7 +235,6 @@ export class ListeningSystem extends createSystem({
 
   /** Before the first play: one record glows, two fingertips show the pinch. No words. */
   private buildCue(): void {
-    const first = this.records[this.featured].mesh;
     this.haloMaterial = new MeshBasicMaterial({
       map: glowTexture('255,196,128'),
       transparent: true,
@@ -242,14 +244,17 @@ export class ListeningSystem extends createSystem({
     this.halo = new Mesh(new PlaneGeometry(SLEEVE_SIZE * 2.3, SLEEVE_SIZE * 2.3), this.haloMaterial);
     this.halo.position.z = -0.006;
     this.halo.raycast = () => {};
-    first.add(this.halo);
     const fingerMaterial = new MeshBasicMaterial({ color: 0xffe2bd, transparent: true, opacity: 0.9, depthWrite: false });
     const tip = new SphereGeometry(0.0085, 16, 12);
     this.fingerA = new Mesh(tip, fingerMaterial);
     this.fingerB = new Mesh(tip, fingerMaterial);
     this.fingerA.raycast = () => {};
     this.fingerB.raycast = () => {};
-    first.add(this.fingerA, this.fingerB);
+    // Follows the record but is not part of it: grabbing tests every child mesh,
+    // so a glow parented to a sleeve would steal pinches meant for its neighbours.
+    this.cue = new Group();
+    this.cue.add(this.halo, this.fingerA, this.fingerB);
+    this.world.createTransformEntity(this.cue);
     // Returning listeners already know the pinch: the glow alone is enough.
     if (!this.history.firstVisit) this.fingerA.visible = this.fingerB.visible = false;
   }
@@ -270,6 +275,7 @@ export class ListeningSystem extends createSystem({
       halo.position.z = -0.005;
       halo.raycast = () => {};
       halo.visible = false;
+      this.world.createTransformEntity(halo);
       this.handHalos.push(halo);
       this.handHaloMaterials.push(material);
     }
@@ -583,9 +589,15 @@ export class ListeningSystem extends createSystem({
       }
       const halo = this.handHalos[h];
       const material = this.handHaloMaterials[h];
-      if (target >= 0 && halo.parent !== this.records[target].mesh) {
-        this.records[target].mesh.add(halo);
+      if (target >= 0 && this.handHaloTarget[h] !== target) {
+        this.handHaloTarget[h] = target;
         material.opacity = 0;
+      }
+      if (this.handHaloTarget[h] >= 0) {
+        const followed = this.records[this.handHaloTarget[h]].mesh;
+        halo.position.copy(followed.position);
+        halo.quaternion.copy(followed.quaternion);
+        halo.translateZ(-0.005);
       }
       halo.visible = target >= 0 || material.opacity > 0.01;
       material.opacity += ((target >= 0 ? 0.35 + 0.65 * strength : 0) - material.opacity) * fade;
@@ -674,6 +686,8 @@ export class ListeningSystem extends createSystem({
         this.tmpV.copy(this.tmpHeadWorld).sub(first.homePos).normalize();
         first.mesh.position.copy(first.homePos).addScaledVector(this.tmpV, 0.055 + breathe * 0.012);
       }
+      this.cue.position.copy(first.mesh.position);
+      this.cue.quaternion.copy(first.mesh.quaternion);
     }
 
     // The ring around the platter answers a record in the hand.
