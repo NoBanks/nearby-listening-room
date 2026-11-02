@@ -1,14 +1,11 @@
 import { AssetType, defineAssets } from '@iwsdk/core';
-import catalog from './catalog.json';
+import { coverAssetId, resolveUrl, TRACKS } from './catalog.js';
 
+// Sleeves with no art path get a drawn placeholder at runtime instead.
 const covers = Object.fromEntries(
-  catalog.map((track) => [
-    `cover-${track.id}`,
-    {
-      url: `${import.meta.env.BASE_URL}catalog/covers/${track.id}.jpg`,
-      type: AssetType.Texture,
-      name: track.title,
-    },
+  TRACKS.filter((track) => track.art).map((track) => [
+    coverAssetId(track),
+    { url: resolveUrl(track.art), type: AssetType.Texture, name: track.title },
   ]),
 );
 

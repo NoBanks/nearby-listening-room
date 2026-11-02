@@ -9,3 +9,9 @@ export const Sleeve = createComponent('Sleeve', {
 export const SleeveHit = createComponent('SleeveHit', {
   trackIndex: { type: Types.Int16, default: 0 },
 });
+
+// Invisible target around the tonearm: a pinch or click here pauses and resumes.
+export const TonearmHit = createComponent('TonearmHit', {});
+
+// Invisible target around the radio: pinch it and the host picks a record.
+export const RadioHit = createComponent('RadioHit', {});

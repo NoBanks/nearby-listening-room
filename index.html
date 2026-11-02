@@ -18,6 +18,7 @@
       #landing.gone { opacity: 0; pointer-events: none; }
       h1 { margin: 0; font-weight: 400; font-size: clamp(30px, 6vw, 58px); letter-spacing: 0.02em; }
       p { margin: 0; font-size: clamp(15px, 2.2vw, 20px); color: #b59a7c; font-style: italic; }
+      p.small { font-size: 14px; font-style: normal; opacity: 0.8; }
       .row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
       button {
         font: inherit; font-size: 20px; padding: 16px 36px; border-radius: 999px; cursor: pointer;
@@ -26,6 +27,24 @@
       button.ghost { background: transparent; color: #e6c79c; }
       button:disabled { opacity: 0.4; cursor: wait; }
       button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+      #caption {
+        position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 5;
+        max-width: min(720px, calc(100vw - 32px)); padding: 12px 22px; border-radius: 18px;
+        background: rgba(12,8,6,0.84); color: #fbe6c6; font: 20px/1.4 Georgia, 'Times New Roman', serif;
+        text-align: center; opacity: 0; transition: opacity 0.4s ease; pointer-events: none;
+      }
+      #caption.on { opacity: 1; }
+      #flatbar {
+        position: fixed; left: 0; right: 0; bottom: 16px; z-index: 6; display: none;
+        justify-content: center; gap: 10px; padding: 0 16px;
+      }
+      #flatbar.on { display: flex; }
+      #flatbar button { font-size: 15px; padding: 8px 16px; min-height: 40px; }
+      #flatbar input {
+        font: 16px Georgia, serif; padding: 8px 16px; min-height: 40px; box-sizing: border-box;
+        border-radius: 999px; border: 1px solid #c79a62; background: rgba(12,8,6,0.8); color: #fbe6c6;
+        width: min(340px, 50vw);
+      }
     </style>
   </head>
   <body style="margin: 0">
@@ -33,11 +52,17 @@
     <div id="landing">
       <h1>Nearby Listening Room</h1>
       <p>Sit down. Bring your hands. The music of NoBanks Nearby.</p>
+      <p class="small">On this screen: click a record to play it. Space pauses, H lets the host pick.</p>
       <div class="row">
         <button id="enter" disabled>Enter the room</button>
         <button id="flat" class="ghost" disabled>Listen on this screen</button>
       </div>
     </div>
+    <div id="caption" role="status" aria-live="polite"></div>
+    <form id="flatbar" aria-label="Room controls">
+      <input id="ask" type="text" placeholder="Ask the host: a title, a mood, or surprise me" aria-label="Ask the host" />
+      <button id="cc" type="button" class="ghost" aria-pressed="true">Captions on</button>
+    </form>
     <script type="module" src="/src/index.ts"></script>
   </body>
 </html>

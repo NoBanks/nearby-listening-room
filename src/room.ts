@@ -9,7 +9,9 @@ import {
   CylinderGeometry,
   DoubleSide,
   ExtrudeGeometry,
+  Float32BufferAttribute,
   Group,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
@@ -46,6 +48,8 @@ const PLATTER_Y = DESK_Y + PLINTH_H + 0.018;
 
 export const PLATTER = { x: -0.03, y: PLATTER_Y, z: -0.4, dropRadius: 0.24 };
 export const STAND = { x: -0.37, y: DESK_Y + 0.105, z: -0.36 };
+// Inside the two-foot (0.61 m) reach from the head, like every interactive piece.
+export const RADIO = { x: -0.38, y: DESK_Y + 0.075, z: -0.22 };
 export const SPEAKER_L = { x: -0.78, y: DESK_Y + 0.2, z: -0.56 };
 export const SPEAKER_R = { x: 0.78, y: DESK_Y + 0.2, z: -0.56 };
 
@@ -57,6 +61,8 @@ export interface RoomParts {
   vinylLabel: MeshBasicMaterial;
   platter: Mesh;
   tonearm: Group;
+  /** The cartridge end of the arm: where a fingertip pinches to pause. */
+  headshell: Mesh;
   dropRing: Mesh;
   windowBase: MeshBasicMaterial;
   windowPulse: MeshBasicMaterial;
@@ -67,6 +73,7 @@ export interface RoomParts {
   dustMaterial: PointsMaterial;
   powerLed: MeshBasicMaterial;
   plaque: TextPlaque;
+  radio: Group;
 }
 
 function arcBand(inner: number, outer: number, span: number, depth: number): ExtrudeGeometry {
@@ -78,6 +85,31 @@ function arcBand(inner: number, outer: number, span: number, depth: number): Ext
   shape.absarc(0, 0, inner, end, start, true);
   shape.closePath();
   return new ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 40 });
+}
+
+/**
+ * Bakes several small static pieces that share one material into a single
+ * geometry, so they cost one draw call instead of one each (Quest budget).
+ */
+function batch(pieces: { geometry: BufferGeometry; x: number; y: number; z: number }[]): BufferGeometry {
+  const position: number[] = [];
+  const normal: number[] = [];
+  const uv: number[] = [];
+  const matrix = new Matrix4();
+  for (const piece of pieces) {
+    const geometry = piece.geometry.toNonIndexed();
+    geometry.applyMatrix4(matrix.makeTranslation(piece.x, piece.y, piece.z));
+    position.push(...(geometry.getAttribute('position').array as Float32Array));
+    normal.push(...(geometry.getAttribute('normal').array as Float32Array));
+    uv.push(...(geometry.getAttribute('uv').array as Float32Array));
+    geometry.dispose();
+    piece.geometry.dispose();
+  }
+  const merged = new BufferGeometry();
+  merged.setAttribute('position', new Float32BufferAttribute(position, 3));
+  merged.setAttribute('normal', new Float32BufferAttribute(normal, 3));
+  merged.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+  return merged;
 }
 
 export function buildRoom(): RoomParts {
@@ -117,8 +149,13 @@ export function buildRoom(): RoomParts {
   });
   add(new PlaneGeometry(4.6, 2.0), windowPulse, 0, 1.72, -2.96);
   const frame = basic({ color: 0x0c0806 });
-  for (const x of [-2.3, -0.77, 0.77, 2.3]) add(new BoxGeometry(0.05, 2.04, 0.06), frame, x, 1.72, -2.93);
-  for (const y of [0.72, 2.72]) add(new BoxGeometry(4.66, 0.05, 0.06), frame, 0, y, -2.93);
+  add(
+    batch([
+      ...[-2.3, -0.77, 0.77, 2.3].map((x) => ({ geometry: new BoxGeometry(0.05, 2.04, 0.06), x, y: 1.72, z: -2.93 })),
+      ...[0.72, 2.72].map((y) => ({ geometry: new BoxGeometry(4.66, 0.05, 0.06), x: 0, y, z: -2.93 })),
+    ]),
+    frame,
+  );
 
   // Desk
   const deskSpan = Math.PI * 0.9;
@@ -127,7 +164,10 @@ export function buildRoom(): RoomParts {
   desk.rotation.x = -Math.PI / 2;
   desk.position.y = DESK_Y - 0.035;
   const legs = basic({ color: 0x0e0704 });
-  for (const x of [-0.72, 0.72]) add(new BoxGeometry(0.05, DESK_Y - 0.04, 0.46), legs, x, (DESK_Y - 0.04) / 2, -0.5);
+  add(
+    batch([-0.72, 0.72].map((x) => ({ geometry: new BoxGeometry(0.05, DESK_Y - 0.04, 0.46), x, y: (DESK_Y - 0.04) / 2, z: -0.5 }))),
+    legs,
+  );
 
   // Shelves: open rails so the city shows between the records.
   const walnut = basic({ color: 0x3c2212 });
@@ -138,16 +178,16 @@ export function buildRoom(): RoomParts {
     rail.rotation.x = -Math.PI / 2;
   }
   const brass = basic({ color: 0x9c7a44 });
-  for (const degrees of [-76, -38, 38, 76]) {
+  const posts = [-76, -38, 38, 76].map((degrees) => {
     const a = (degrees * Math.PI) / 180;
-    add(
-      new CylinderGeometry(0.005, 0.005, 1.26 - DESK_Y + 0.17, 8),
-      brass,
-      Math.sin(a) * (SHELF_RADIUS + 0.03),
-      (1.26 + DESK_Y) / 2 + 0.085,
-      -Math.cos(a) * (SHELF_RADIUS + 0.03),
-    );
-  }
+    return {
+      geometry: new CylinderGeometry(0.005, 0.005, 1.26 - DESK_Y + 0.17, 8),
+      x: Math.sin(a) * (SHELF_RADIUS + 0.03),
+      y: (1.26 + DESK_Y) / 2 + 0.085,
+      z: -Math.cos(a) * (SHELF_RADIUS + 0.03),
+    };
+  });
+  add(batch(posts), brass);
 
   // Turntable
   const brushed = basic({ map: brushedTexture() });
@@ -270,7 +310,7 @@ export function buildRoom(): RoomParts {
 
   // The radio the host will speak through.
   const radio = new Group();
-  radio.position.set(-0.52, DESK_Y + 0.075, -0.2);
+  radio.position.set(RADIO.x, RADIO.y, RADIO.z);
   radio.lookAt(0, HEAD_Y, 0);
   const radioBody = basic({ color: 0x24140b });
   const radioFace = basic({ map: radioFaceTexture() });
@@ -288,7 +328,7 @@ export function buildRoom(): RoomParts {
   const radioGlow = new Sprite(
     new SpriteMaterial({ map: glow, transparent: true, blending: AdditiveBlending, depthWrite: false, opacity: 0.1 }),
   );
-  radioGlow.position.set(-0.5, DESK_Y + 0.1, -0.17);
+  radioGlow.position.set(RADIO.x + 0.02, RADIO.y + 0.025, RADIO.z + 0.03);
   radioGlow.scale.setScalar(0.32);
   radioGlow.raycast = () => {};
   root.add(radioGlow);
@@ -326,6 +366,7 @@ export function buildRoom(): RoomParts {
     vinylLabel,
     platter,
     tonearm,
+    headshell,
     dropRing,
     windowBase,
     windowPulse,
@@ -336,5 +377,6 @@ export function buildRoom(): RoomParts {
     dustMaterial,
     powerLed,
     plaque,
+    radio,
   };
 }
