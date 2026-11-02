@@ -48,7 +48,8 @@ const PLATTER_Y = DESK_Y + PLINTH_H + 0.018;
 
 export const PLATTER = { x: -0.03, y: PLATTER_Y, z: -0.4, dropRadius: 0.24 };
 export const STAND = { x: -0.37, y: DESK_Y + 0.105, z: -0.36 };
-export const RADIO = { x: -0.52, y: DESK_Y + 0.075, z: -0.2 };
+// Inside the two-foot (0.61 m) reach from the head, like every interactive piece.
+export const RADIO = { x: -0.38, y: DESK_Y + 0.075, z: -0.22 };
 export const SPEAKER_L = { x: -0.78, y: DESK_Y + 0.2, z: -0.56 };
 export const SPEAKER_R = { x: 0.78, y: DESK_Y + 0.2, z: -0.56 };
 
@@ -327,7 +328,7 @@ export function buildRoom(): RoomParts {
   const radioGlow = new Sprite(
     new SpriteMaterial({ map: glow, transparent: true, blending: AdditiveBlending, depthWrite: false, opacity: 0.1 }),
   );
-  radioGlow.position.set(-0.5, DESK_Y + 0.1, -0.17);
+  radioGlow.position.set(RADIO.x + 0.02, RADIO.y + 0.025, RADIO.z + 0.03);
   radioGlow.scale.setScalar(0.32);
   radioGlow.raycast = () => {};
   root.add(radioGlow);
