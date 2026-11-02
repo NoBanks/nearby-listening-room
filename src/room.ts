@@ -72,6 +72,7 @@ export interface RoomParts {
   dustMaterial: PointsMaterial;
   powerLed: MeshBasicMaterial;
   plaque: TextPlaque;
+  radio: Group;
 }
 
 function arcBand(inner: number, outer: number, span: number, depth: number): ExtrudeGeometry {
@@ -375,5 +376,6 @@ export function buildRoom(): RoomParts {
     dustMaterial,
     powerLed,
     plaque,
+    radio,
   };
 }

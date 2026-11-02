@@ -21,7 +21,7 @@ import {
   VisibilityState,
 } from '@iwsdk/core';
 import { RoomAudio } from './audio.js';
-import { coverAssetId, resolveUrl, TRACKS } from './catalog.js';
+import { coverAssetId, resolveUrl, type Track, TRACKS } from './catalog.js';
 import {
   buildRoom,
   HEAD_Y,
@@ -34,8 +34,12 @@ import {
   SPEAKER_R,
   STAND,
 } from './room.js';
+import { Captions } from './captions.js';
 import { PalmGesture } from './hand-gestures.js';
-import { Sleeve, SleeveHit, TonearmHit } from './sleeve-component.js';
+import { createHost } from './host/create-host.js';
+import type { HostContext, RadioHost } from './host/host.js';
+import { HostVoice } from './host/voice.js';
+import { RadioHit, Sleeve, SleeveHit, TonearmHit } from './sleeve-component.js';
 import { glowTexture, placeholderCoverTexture } from './textures.js';
 
 const ROWS = [1.265, 1.045];
@@ -50,6 +54,7 @@ const DIM = 0.13;
 /** A fingertip this close to a sleeve or the tonearm lights it up. */
 const NEAR = 0.16;
 const TONEARM_PINCH = 0.075;
+const RADIO_PINCH = 0.13;
 
 interface RecordState {
   entity: Entity;
@@ -70,8 +75,23 @@ export class ListeningSystem extends createSystem({
   hovered: { required: [SleeveHit, Hovered] },
   armPressed: { required: [TonearmHit, Pressed] },
   armHovered: { required: [TonearmHit, Hovered] },
+  radioPressed: { required: [RadioHit, Pressed] },
+  radioHovered: { required: [RadioHit, Hovered] },
 }) {
   readonly audio = new RoomAudio();
+  readonly captions = new Captions();
+  readonly host: RadioHost = createHost({
+    caption: (text) => this.captions.show(text),
+    speak: (text, audioUrl) => this.voice.speak(text, audioUrl),
+  });
+  private voice = new HostVoice(this.audio);
+  private started = false;
+  private sessionRecent: string[] = [];
+  private asking = false;
+  private radioNear = 0;
+  private lastRadioAsk = -10;
+  private radioPos = new Vector3();
+  private radioHit!: Mesh;
 
   private parts!: RoomParts;
   private records: RecordState[] = [];
@@ -127,6 +147,7 @@ export class ListeningSystem extends createSystem({
       this.queries.grabbed.subscribe('disqualify', (entity) => this.onRelease(entity)),
       this.queries.pressed.subscribe('disqualify', (entity) => this.onPress(entity)),
       this.queries.armPressed.subscribe('disqualify', () => this.onTonearm()),
+      this.queries.radioPressed.subscribe('disqualify', () => this.onRadio()),
       this.world.visibilityState.subscribe((state) => this.onVisibility(state)),
     );
 
@@ -143,6 +164,7 @@ export class ListeningSystem extends createSystem({
       if (!event.inputSource.hand || (side !== 'left' && side !== 'right')) return;
       this.player.indexTipSpaces[side].getWorldPosition(this.tmpTip);
       if (this.distanceToArm(this.tmpTip) < TONEARM_PINCH) this.onTonearm();
+      else if (this.tmpTip.distanceTo(this.radioPos) < RADIO_PINCH) this.onRadio();
     };
     const onSession = () => {
       const session = this.world.renderer.xr.getSession();
@@ -244,6 +266,56 @@ export class ListeningSystem extends createSystem({
     const entity = this.world.createTransformEntity(this.armHit);
     entity.addComponent(TonearmHit);
     entity.addComponent(RayInteractable);
+    this.radioHit = new Mesh(new BoxGeometry(0.26, 0.17, 0.12), new MeshBasicMaterial({ visible: false }));
+    this.radioHit.name = 'Radio';
+    const radio = this.world.createTransformEntity(this.radioHit);
+    radio.addComponent(RadioHit);
+    radio.addComponent(RayInteractable);
+    this.world.createTransformEntity(this.captions.mesh);
+  }
+
+  /** The room greets the listener once, shortly after they arrive. */
+  start(): void {
+    if (this.started) return;
+    this.started = true;
+    window.setTimeout(() => this.host.onColdStart(this.context()), 1200);
+  }
+
+  /** What the host knows right now. */
+  context(): HostContext {
+    return {
+      firstVisit: true,
+      featured: TRACKS[0],
+      totalPlays: this.sessionRecent.length,
+      recent: this.sessionRecent,
+      hour: new Date().getHours(),
+    };
+  }
+
+  /** Pinch the radio: the host chooses a record and puts it on. */
+  private onRadio(): void {
+    if (this.now - this.lastRadioAsk < 0.6 || this.held >= 0) return;
+    this.lastRadioAsk = this.now;
+    this.audio.unlock();
+    void this.ask('surprise me');
+  }
+
+  /** Any free-text request to the host: a title, a mood, "pause", or nothing in particular. */
+  async ask(text: string): Promise<void> {
+    if (this.asking) return;
+    this.asking = true;
+    try {
+      const reply = await this.host.onRequest(text, this.context());
+      if (reply.line) void this.host.say(reply.line);
+      if (reply.action === 'pause' && this.current >= 0 && !this.paused) this.togglePause();
+      if (reply.action === 'resume' && this.current >= 0 && this.paused) this.togglePause();
+      if (reply.play) {
+        const index = TRACKS.findIndex((t) => t.id === reply.play);
+        if (index >= 0 && index !== this.current) this.load(index, false);
+      }
+    } finally {
+      this.asking = false;
+    }
   }
 
   private distanceToArm(point: Vector3): number {
@@ -294,8 +366,12 @@ export class ListeningSystem extends createSystem({
     this.records[0].mesh.quaternion.copy(this.tmpQ);
     root.localToWorld(this.platterPos.set(PLATTER.x, PLATTER.y, PLATTER.z));
     this.audio.placeTurntable(this.platterPos.x, this.platterPos.y + 0.05, this.platterPos.z);
-    root.localToWorld(this.tmpV.set(RADIO.x, RADIO.y, RADIO.z));
-    this.audio.placeRadio(this.tmpV.x, this.tmpV.y, this.tmpV.z);
+    root.localToWorld(this.radioPos.set(RADIO.x, RADIO.y, RADIO.z));
+    this.audio.placeRadio(this.radioPos.x, this.radioPos.y, this.radioPos.z);
+    if (this.radioHit) {
+      this.radioHit.position.copy(this.radioPos);
+      this.radioHit.quaternion.copy(this.parts.radio.getWorldQuaternion(this.tmpQ));
+    }
     this.audio.placeSpeakers(
       root.localToWorld(this.tmpV.set(SPEAKER_L.x, SPEAKER_L.y, SPEAKER_L.z)).x,
       this.tmpV.y,
@@ -354,7 +430,7 @@ export class ListeningSystem extends createSystem({
     record.flying = true;
   }
 
-  private load(index: number): void {
+  private load(index: number, announce = true): void {
     if (this.current >= 0 && this.current !== index) this.flyHome(this.current);
     this.current = index;
     this.paused = false;
@@ -371,6 +447,7 @@ export class ListeningSystem extends createSystem({
     plaque.draw(track.title);
     powerLed.color.set(0xff5a28);
     this.audio.play(resolveUrl(track.audio), NEEDLE_DELAY);
+    this.noteStart(track, announce);
     if (!this.hasDropped) {
       this.hasDropped = true;
       this.warmthTarget = 1;
@@ -378,6 +455,14 @@ export class ListeningSystem extends createSystem({
       this.fingerA.visible = false;
       this.fingerB.visible = false;
     }
+  }
+
+  private noteStart(track: Track, announce: boolean): void {
+    const at = this.sessionRecent.indexOf(track.id);
+    if (at >= 0) this.sessionRecent.splice(at, 1);
+    this.sessionRecent.unshift(track.id);
+    // A host-chosen record was already introduced in the host's reply.
+    if (announce) window.setTimeout(() => this.host.onTrackStart(track, this.context()), NEEDLE_DELAY * 1000 + 300);
   }
 
   private togglePause(): void {
@@ -399,7 +484,10 @@ export class ListeningSystem extends createSystem({
   private endTrack(): void {
     const finished = this.current;
     this.liftNeedle();
-    if (finished >= 0) this.flyHome(finished);
+    if (finished >= 0) {
+      this.flyHome(finished);
+      this.host.onTrackEnd(TRACKS[finished], this.context());
+    }
   }
 
   private onVisibility(state: VisibilityState): void {
@@ -438,12 +526,14 @@ export class ListeningSystem extends createSystem({
     const presenting = xr.isPresenting;
     const fade = Math.min(1, delta * 12);
     let armNear = 0;
+    let radioNear = 0;
     for (let h = 0; h < 2; h++) {
       let target = -1;
       let strength = 0;
       if (presenting) {
         this.player.indexTipSpaces[h === 0 ? 'left' : 'right'].getWorldPosition(this.tmpTip);
         armNear = Math.max(armNear, 1 - this.distanceToArm(this.tmpTip) / NEAR);
+        radioNear = Math.max(radioNear, 1 - this.tmpTip.distanceTo(this.radioPos) / (RADIO_PINCH * 1.6));
         if (this.held < 0) {
           let best = NEAR;
           for (let i = 0; i < this.records.length; i++) {
@@ -473,6 +563,8 @@ export class ListeningSystem extends createSystem({
       material.opacity += ((target >= 0 ? 0.35 + 0.65 * strength : 0) - material.opacity) * fade;
     }
     if (!presenting && this.queries.armHovered.entities.size > 0) armNear = 1;
+    if (!presenting && this.queries.radioHovered.entities.size > 0) radioNear = 1;
+    this.radioNear += (Math.max(0, radioNear) - this.radioNear) * fade;
 
     // Open palm, either hand: pause or resume.
     if (presenting) {
@@ -513,7 +605,7 @@ export class ListeningSystem extends createSystem({
     }
     parts.windowBase.color.setScalar(0.3 + 0.7 * this.warmth);
     (parts.lampGlow.material as { opacity: number }).opacity = this.warmth * (0.5 + level * 0.14);
-    (parts.radioGlow.material as { opacity: number }).opacity = 0.08 + this.warmth * 0.16;
+    (parts.radioGlow.material as { opacity: number }).opacity = 0.08 + this.warmth * 0.16 + this.radioNear * 0.6;
     parts.windowPulse.opacity = this.warmth * level * 0.5;
     parts.dustMaterial.opacity = this.warmth * (0.26 + level * 0.3);
     parts.dust.rotation.y = time * 0.012;
@@ -586,5 +678,6 @@ export class ListeningSystem extends createSystem({
     camera.getWorldDirection(this.tmpF);
     this.tmpU.set(0, 1, 0).applyQuaternion(camera.getWorldQuaternion(this.tmpQ));
     this.audio.setListener(this.tmpV.x, this.tmpV.y, this.tmpV.z, this.tmpF.x, this.tmpF.y, this.tmpF.z, this.tmpU.x, this.tmpU.y, this.tmpU.z);
+    this.captions.update(delta, time, this.tmpV, this.tmpF, this.world.renderer.xr.isPresenting);
   }
 }
