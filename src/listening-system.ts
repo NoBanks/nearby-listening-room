@@ -26,6 +26,7 @@ import {
   buildRoom,
   HEAD_Y,
   PLATTER,
+  RADIO,
   RoomParts,
   SHELF_RADIUS,
   SLEEVE_SIZE,
@@ -292,6 +293,9 @@ export class ListeningSystem extends createSystem({
     this.records[0].mesh.position.copy(this.records[0].homePos);
     this.records[0].mesh.quaternion.copy(this.tmpQ);
     root.localToWorld(this.platterPos.set(PLATTER.x, PLATTER.y, PLATTER.z));
+    this.audio.placeTurntable(this.platterPos.x, this.platterPos.y + 0.05, this.platterPos.z);
+    root.localToWorld(this.tmpV.set(RADIO.x, RADIO.y, RADIO.z));
+    this.audio.placeRadio(this.tmpV.x, this.tmpV.y, this.tmpV.z);
     this.audio.placeSpeakers(
       root.localToWorld(this.tmpV.set(SPEAKER_L.x, SPEAKER_L.y, SPEAKER_L.z)).x,
       this.tmpV.y,

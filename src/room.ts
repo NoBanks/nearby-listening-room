@@ -48,6 +48,7 @@ const PLATTER_Y = DESK_Y + PLINTH_H + 0.018;
 
 export const PLATTER = { x: -0.03, y: PLATTER_Y, z: -0.4, dropRadius: 0.24 };
 export const STAND = { x: -0.37, y: DESK_Y + 0.105, z: -0.36 };
+export const RADIO = { x: -0.52, y: DESK_Y + 0.075, z: -0.2 };
 export const SPEAKER_L = { x: -0.78, y: DESK_Y + 0.2, z: -0.56 };
 export const SPEAKER_R = { x: 0.78, y: DESK_Y + 0.2, z: -0.56 };
 
@@ -307,7 +308,7 @@ export function buildRoom(): RoomParts {
 
   // The radio the host will speak through.
   const radio = new Group();
-  radio.position.set(-0.52, DESK_Y + 0.075, -0.2);
+  radio.position.set(RADIO.x, RADIO.y, RADIO.z);
   radio.lookAt(0, HEAD_Y, 0);
   const radioBody = basic({ color: 0x24140b });
   const radioFace = basic({ map: radioFaceTexture() });
