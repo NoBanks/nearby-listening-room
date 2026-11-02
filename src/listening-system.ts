@@ -36,6 +36,7 @@ import {
 } from './room.js';
 import { Captions } from './captions.js';
 import { PalmGesture } from './hand-gestures.js';
+import { featuredTrack, ListeningHistory, shelfOrder } from './history.js';
 import { createHost } from './host/create-host.js';
 import type { HostContext, RadioHost } from './host/host.js';
 import { HostVoice } from './host/voice.js';
@@ -44,6 +45,10 @@ import { glowTexture, placeholderCoverTexture } from './textures.js';
 
 const ROWS = [1.265, 1.045];
 const COLUMNS = Math.max(1, Math.ceil(TRACKS.length / ROWS.length));
+/** Column indices ordered from the centre of the shelf outward, right of centre first. */
+const CENTER_OUT = Array.from({ length: COLUMNS }, (_, i) => i).sort(
+  (a, b) => Math.abs(a - (COLUMNS - 1) / 2) - Math.abs(b - (COLUMNS - 1) / 2) || b - a,
+);
 const SHELF_DEGREES = 132;
 const ARM_REST = 0.42;
 const ARM_PLAY = -0.34;
@@ -85,11 +90,15 @@ export class ListeningSystem extends createSystem({
     speak: (text, audioUrl) => this.voice.speak(text, audioUrl),
   });
   private voice = new HostVoice(this.audio);
+  readonly history = new ListeningHistory();
+  /** Catalog index of tonight's featured record: the one that glows. */
+  private featured = 0;
+  /** Shelf slot for each catalog index (0 is the best spot, in the eyeline). */
+  private slotOf: number[] = [];
   private started = false;
   private startedAt = -1;
   private nudged = false;
   private everGrabbed = false;
-  private sessionRecent: string[] = [];
   private asking = false;
   private radioNear = 0;
   private lastRadioAsk = -10;
@@ -138,6 +147,10 @@ export class ListeningSystem extends createSystem({
   private tmpQ = new Quaternion();
 
   init(): void {
+    const recent = this.history.recentIds();
+    const featured = featuredTrack(TRACKS, new Date(), this.history.previousLast);
+    this.featured = TRACKS.indexOf(featured);
+    shelfOrder(TRACKS, featured, recent).forEach((index, slot) => (this.slotOf[index] = slot));
     this.parts = buildRoom();
     this.world.createTransformEntity(this.parts.root);
     this.buildRecords();
@@ -219,7 +232,7 @@ export class ListeningSystem extends createSystem({
 
   /** Before the first play: one record glows, two fingertips show the pinch. No words. */
   private buildCue(): void {
-    const first = this.records[0].mesh;
+    const first = this.records[this.featured].mesh;
     this.haloMaterial = new MeshBasicMaterial({
       map: glowTexture('255,196,128'),
       transparent: true,
@@ -237,6 +250,8 @@ export class ListeningSystem extends createSystem({
     this.fingerA.raycast = () => {};
     this.fingerB.raycast = () => {};
     first.add(this.fingerA, this.fingerB);
+    // Returning listeners already know the pinch: the glow alone is enough.
+    if (!this.history.firstVisit) this.fingerA.visible = this.fingerB.visible = false;
   }
 
   /** Glows that answer a nearby hand, plus the tonearm's pinch target. */
@@ -287,11 +302,13 @@ export class ListeningSystem extends createSystem({
 
   /** What the host knows right now. */
   context(): HostContext {
+    const last = this.history.previousLast;
     return {
-      firstVisit: true,
-      featured: TRACKS[0],
-      totalPlays: this.sessionRecent.length,
-      recent: this.sessionRecent,
+      firstVisit: this.history.firstVisit,
+      lastPlayed: TRACKS.find((t) => t.id === last),
+      featured: TRACKS[this.featured],
+      totalPlays: this.history.totalPlays,
+      recent: this.history.recentIds(),
       hour: new Date().getHours(),
     };
   }
@@ -343,11 +360,13 @@ export class ListeningSystem extends createSystem({
   private placeInWorld(): void {
     const { root } = this.parts;
     root.updateMatrixWorld(true);
-    const step = (SHELF_DEGREES * Math.PI) / 180 / (COLUMNS - 1);
+    const step = (SHELF_DEGREES * Math.PI) / 180 / Math.max(1, COLUMNS - 1);
     this.records.forEach((record, index) => {
-      const row = Math.floor(index / COLUMNS);
-      // The first record sits just right of centre on the top row, in the natural eyeline.
-      const col = (index + 4) % COLUMNS;
+      // Slots fill the top row from the centre outward, then the bottom row,
+      // so tonight's pick and recent plays sit in the natural eyeline.
+      const slot = this.slotOf[index] ?? index;
+      const row = Math.min(ROWS.length - 1, Math.floor(slot / COLUMNS));
+      const col = CENTER_OUT[slot % COLUMNS];
       const angle = (col - (COLUMNS - 1) / 2) * step;
       this.tmpV.set(Math.sin(angle) * SHELF_RADIUS, ROWS[row], -Math.cos(angle) * SHELF_RADIUS);
       root.localToWorld(record.homePos.copy(this.tmpV));
@@ -463,9 +482,7 @@ export class ListeningSystem extends createSystem({
   }
 
   private noteStart(track: Track, announce: boolean): void {
-    const at = this.sessionRecent.indexOf(track.id);
-    if (at >= 0) this.sessionRecent.splice(at, 1);
-    this.sessionRecent.unshift(track.id);
+    this.history.recordPlay(track.id);
     // A host-chosen record was already introduced in the host's reply.
     if (announce) window.setTimeout(() => this.host.onTrackStart(track, this.context()), NEEDLE_DELAY * 1000 + 300);
   }
@@ -605,7 +622,7 @@ export class ListeningSystem extends createSystem({
     const house = DIM + (1 - DIM) * this.warmth;
     for (const { material, lit, base } of parts.dimmable) material.color.copy(base).multiplyScalar(lit * house);
     for (let i = 0; i < this.records.length; i++) {
-      const brightness = !this.hasDropped && i === 0 ? 1 : 0.07 + 0.93 * this.warmth;
+      const brightness = !this.hasDropped && i === this.featured ? 1 : 0.07 + 0.93 * this.warmth;
       this.records[i].material.color.setScalar(brightness);
     }
     parts.windowBase.color.setScalar(0.3 + 0.7 * this.warmth);
@@ -646,8 +663,8 @@ export class ListeningSystem extends createSystem({
       this.fingerA.position.set(SLEEVE_SIZE * 0.5 + 0.018, gap, 0.03);
       this.fingerB.position.set(SLEEVE_SIZE * 0.5 + 0.018, -gap, 0.03);
       // The record leans out of the shelf toward the viewer, clear of its neighbours.
-      const first = this.records[0];
-      if (!first.flying && this.held !== 0) {
+      const first = this.records[this.featured];
+      if (!first.flying && this.held !== this.featured) {
         this.tmpV.copy(this.tmpHeadWorld).sub(first.homePos).normalize();
         first.mesh.position.copy(first.homePos).addScaledVector(this.tmpV, 0.055 + breathe * 0.012);
       }
