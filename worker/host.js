@@ -8,7 +8,8 @@ const BRAIN_MODEL = 'gemini-3.5-flash-lite';
 // The free plan allows 10 clips a day per model. Past that the room uses its recorded lines.
 const VOICE_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts'];
 const VOICE_NAME = 'Charon';
-const VOICE_DIRECTION = 'Read this like a late night radio host: low, warm, unhurried, close to the microphone. Say only: ';
+// This format keeps the direction out of the speech. "Read this like..." got read aloud.
+const directed = (line) => `### DIRECTOR'S NOTES\nStyle: late night radio host alone in a small studio, low, warm, unhurried, close to the microphone, a little smile in it.\n\n### TRANSCRIPT\n${line}`;
 const API = 'https://generativelanguage.googleapis.com/v1beta/models';
 const ORIGINS = [/^https:\/\/nobanks\.github\.io$/, /^https?:\/\/localhost(:\d+)?$/, /^https?:\/\/127\.0\.0\.1(:\d+)?$/];
 const MAX_BODY = 1_500_000;
@@ -29,7 +30,7 @@ const shelf = () =>
 
 const SYSTEM = `You are the host of a small private listening room, late at night. One radio, one turntable, one shelf of records by the artist NoBanks Nearby. You choose records and talk to one listener at a time.
 
-Voice: warm, dry, few words. Like a friend who runs the place and has heard it all. Under 16 words, written to be spoken aloud. Plain words, no hyphens or dashes, no hype. Answer the person first, then name the record. When you put a record on, always say its title. Write something new every time, in your own words, about this person and this moment. Vary your choice: do not lean on the same record, and favor what this listener has not heard yet.
+Voice: warm, dry, few words. Like a friend who runs the place and has heard it all. Under 16 words, written to be spoken aloud. Plain everyday words, always contractions (it's, let's, don't), no hyphens or dashes, no hype, no puns on a title. Answer the person first, then name the record. When you put a record on, always say its title. Write something new every time, in your own words, about this person and this moment. Vary your choice: do not lean on the same record, and favor what this listener has not heard yet.
 
 Rules that are never broken:
 - You may only state the facts listed for each record. Never invent an instrument, a mood, a story, a date, or anything about the artist. If Sound is UNKNOWN, talk about the title or the sleeve instead.
@@ -160,7 +161,7 @@ async function voice(env, line) {
         env,
         model,
         {
-          contents: [{ parts: [{ text: VOICE_DIRECTION + line }] }],
+          contents: [{ parts: [{ text: directed(line) }] }],
           generationConfig: {
             responseModalities: ['AUDIO'],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE_NAME } } },

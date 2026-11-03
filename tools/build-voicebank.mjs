@@ -20,8 +20,11 @@ const MAX = Number(process.argv[3] || Infinity);
 const KEYS = (process.env.GEMINI_KEYS || process.env.GEMINI_API_KEY || '').split(',').filter(Boolean);
 if (!VOICE || !KEYS.length) throw new Error('usage: build-voicebank <VoiceName> [maxLines], with GEMINI_KEYS set');
 
-const DIRECTION =
-  'Read this like a late night radio host alone in a small studio: low, warm, unhurried, close to the microphone, a little smile in it. Never announcer-y. Say only: ';
+// This format keeps the direction out of the speech. "Read this like..." got read aloud.
+const directed = (line) =>
+  `### DIRECTOR'S NOTES\nStyle: late night radio host alone in a small studio, low, warm, unhurried, close to the microphone, a little smile in it.\n\n### TRANSCRIPT\n${line}`;
+// Longer than this means the voice said more than the line.
+const maxSeconds = (line) => 3 + line.split(' ').length * 0.6;
 const MODEL = 'gemini-3.8-flash-tts';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -40,7 +43,7 @@ async function record(line, file) {
         signal: AbortSignal.timeout(60000),
         headers: { 'x-goog-api-key': KEYS[0], 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: DIRECTION + line }] }],
+          contents: [{ parts: [{ text: directed(line) }] }],
           generationConfig: {
             responseModalities: ['AUDIO'],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
@@ -52,7 +55,9 @@ async function record(line, file) {
       continue;
     }
     if (response.status >= 500) {
-      await sleep(30000);
+      console.log('server error', response.status);
+      KEYS.push(KEYS.shift());
+      await sleep(5000);
       continue;
     }
     const json = await response.json();
@@ -61,8 +66,9 @@ async function record(line, file) {
         KEYS.shift();
         console.log('daily limit reached, keys left:', KEYS.length);
       } else {
-        console.log('waiting out the per-minute limit');
-        await sleep(65000);
+        // Per-minute limit: another project's key can take the next line.
+        KEYS.push(KEYS.shift());
+        await sleep(4000);
       }
       continue;
     }
@@ -77,6 +83,11 @@ async function record(line, file) {
       { windowsHide: true },
     );
     fs.unlinkSync(tmp);
+    const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { windowsHide: true });
+    if (Number(stdout) > maxSeconds(line)) {
+      console.log('too long, retrying:', Number(stdout), line);
+      continue;
+    }
     return true;
   }
 }

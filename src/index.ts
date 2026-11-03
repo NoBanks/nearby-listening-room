@@ -1,8 +1,15 @@
-import { World } from '@iwsdk/core';
+import { DefaultLoadingManager, World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
 import { hostEndpoint } from './host/create-host.js';
 import { HostMic } from './host/mic.js';
 import { ListeningSystem } from './listening-system.js';
+
+// Hands come from this site instead of a CDN, and download on the landing page:
+// a slow CDN would otherwise mean no hands in a room you use with your hands.
+const HAND_CDN = 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/';
+const HANDS = `${import.meta.env.BASE_URL}profiles/generic-hand/`;
+DefaultLoadingManager.setURLModifier((url) => (url.startsWith(HAND_CDN) ? HANDS + url.slice(HAND_CDN.length) : url));
+for (const side of ['left', 'right']) void fetch(`${HANDS}${side}.glb`).catch(() => {});
 
 World.create(
   document.getElementById('scene-container') as HTMLDivElement,
