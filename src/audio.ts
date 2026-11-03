@@ -2,6 +2,8 @@
 // itself, and the left and right channels come from the speakers either side of
 // it, so the record is where the sound is but the mix keeps its width. The
 // sound stage stays put when the head turns. Every start and stop is a fade.
+const VOICE_MAX_MS = 30000;
+
 export class RoomAudio {
   readonly element = new Audio();
   level = 0;
@@ -17,12 +19,21 @@ export class RoomAudio {
   private center: PannerNode | null = null;
   private voicePanner: PannerNode | null = null;
   private voiceElement: HTMLAudioElement | null = null;
+  /** The newest voice clip. An older one that fails or times out changes nothing. */
+  private voiceClip = 0;
+  private voiceTimer = 0;
+  private voiceWaiting: (() => void)[] = [];
+  /** Who wants the music low. Either one holds the dip until they let go. */
+  private ducks = { host: false, listener: false };
   private turntable = [0, 0, 0];
   private radio = [0, 0, 0];
   private blurTimer = 0;
+  private blurred = false;
   private analyser: AnalyserNode | null = null;
   private bins = new Uint8Array(0);
   private stopTimer = 0;
+  /** The record waiting to start. Outlives a pause, so a resume plays this one. */
+  private pending: { url: string; level: number } | null = null;
 
   constructor() {
     this.element.preload = 'auto';
@@ -31,7 +42,7 @@ export class RoomAudio {
   /** Must run inside a user gesture at least once. Safe to call repeatedly. */
   unlock(): void {
     if (!this.ctx) this.build();
-    void this.ctx!.resume();
+    if (!this.blurred) void this.ctx!.resume();
   }
 
   private build(): void {
@@ -109,16 +120,23 @@ export class RoomAudio {
   }
 
   /** Lowers the music under the host's voice, and brings it back up, gently. */
-  duck(on: boolean): void {
+  duck(on: boolean, who: 'host' | 'listener' = 'host'): void {
+    this.ducks[who] = on;
+    const low = this.ducks.host || this.ducks.listener;
+    this.setDuck(low ? 0.35 : 1, low ? 0.15 : 0.5);
+  }
+
+  private setDuck(level: number, seconds: number): void {
     const ctx = this.ctx;
-    if (!ctx || !this.duckGain) return;
+    // While the menu is open the room stays faded out; leaving the menu restores this.
+    if (!ctx || !this.duckGain || this.blurred) return;
     this.duckGain.gain.cancelScheduledValues(ctx.currentTime);
-    this.duckGain.gain.setTargetAtTime(on ? 0.35 : 1, ctx.currentTime, on ? 0.15 : 0.5);
+    this.duckGain.gain.setTargetAtTime(level, ctx.currentTime, seconds);
   }
 
   /**
    * Plays a spoken clip (cloud TTS) from the radio, ducking the music under it.
-   * Resolves when the clip ends or fails.
+   * A newer clip replaces this one. Resolves when the last clip ends or fails.
    */
   playVoice(url: string): Promise<void> {
     this.unlock();
@@ -127,21 +145,28 @@ export class RoomAudio {
       this.voiceElement = new Audio();
       this.voiceElement.crossOrigin = 'anonymous';
       ctx.createMediaElementSource(this.voiceElement).connect(this.voicePanner!);
+      const over = () => this.voiceOver(this.voiceClip);
+      this.voiceElement.addEventListener('ended', over);
+      this.voiceElement.addEventListener('error', over);
     }
     const voice = this.voiceElement;
+    const clip = ++this.voiceClip;
     voice.src = url;
     this.duck(true);
+    // A clip stalled on a dead connection fires nothing, and the music must still come back.
+    window.clearTimeout(this.voiceTimer);
+    this.voiceTimer = window.setTimeout(() => this.voiceOver(clip), VOICE_MAX_MS);
     return new Promise((resolve) => {
-      const done = () => {
-        voice.removeEventListener('ended', done);
-        voice.removeEventListener('error', done);
-        this.duck(false);
-        resolve();
-      };
-      voice.addEventListener('ended', done);
-      voice.addEventListener('error', done);
-      voice.play().catch(done);
+      this.voiceWaiting.push(resolve);
+      voice.play().catch(() => this.voiceOver(clip));
     });
+  }
+
+  private voiceOver(clip: number): void {
+    if (clip !== this.voiceClip) return;
+    window.clearTimeout(this.voiceTimer);
+    this.duck(false);
+    for (const resolve of this.voiceWaiting.splice(0)) resolve();
   }
 
   private panners: PannerNode[] = [];
@@ -182,19 +207,21 @@ export class RoomAudio {
       this.gain.gain.cancelScheduledValues(ctx.currentTime);
       this.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.18);
     }
-    this.stopTimer = window.setTimeout(() => {
-      this.element.src = url;
-      this.element.currentTime = 0;
-      this.trimLevel = level;
-      if (this.trim) this.trim.gain.value = level;
-      this.resume();
-    }, delaySeconds * 1000);
+    this.pending = { url, level };
+    this.stopTimer = window.setTimeout(() => this.resume(), delaySeconds * 1000);
   }
 
-  /** Fades in from wherever the track is. */
+  /** Fades in from wherever the track is, or starts the record waiting its turn. */
   resume(): void {
     window.clearTimeout(this.stopTimer);
-    void this.ctx?.resume();
+    if (this.pending) {
+      this.element.src = this.pending.url;
+      this.element.currentTime = 0;
+      this.trimLevel = this.pending.level;
+      if (this.trim) this.trim.gain.value = this.pending.level;
+      this.pending = null;
+    }
+    if (!this.blurred) void this.ctx?.resume();
     void this.element.play();
     const ctx = this.ctx;
     if (ctx && this.gain) {
@@ -219,8 +246,8 @@ export class RoomAudio {
     const ctx = this.ctx;
     if (!ctx || !this.duckGain) return;
     window.clearTimeout(this.blurTimer);
-    this.duckGain.gain.cancelScheduledValues(ctx.currentTime);
-    this.duckGain.gain.setTargetAtTime(0, ctx.currentTime, 0.12);
+    this.setDuck(0, 0.12);
+    this.blurred = true;
     this.blurTimer = window.setTimeout(() => void ctx.suspend(), 600);
   }
 
@@ -228,10 +255,8 @@ export class RoomAudio {
     const ctx = this.ctx;
     if (!ctx || !this.duckGain) return;
     window.clearTimeout(this.blurTimer);
-    void ctx.resume().then(() => {
-      this.duckGain!.gain.cancelScheduledValues(ctx.currentTime);
-      this.duckGain!.gain.setTargetAtTime(1, ctx.currentTime, 0.4);
-    });
+    this.blurred = false;
+    void ctx.resume().then(() => this.setDuck(this.ducks.host || this.ducks.listener ? 0.35 : 1, 0.4));
   }
 
   /** Low-end energy from 0 to 1, for the room to breathe with. */

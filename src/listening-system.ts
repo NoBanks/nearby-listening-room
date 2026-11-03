@@ -66,6 +66,8 @@ const TONEARM_PINCH = 0.075;
 const RADIO_PINCH = 0.13;
 /** Holding the radio longer than this means the listener is talking to it. */
 const TALK_MIN_SECONDS = 0.5;
+/** A ray press ending this soon after a pinch at the tonearm or radio is that same pinch. */
+const NEAR_PINCH_GRACE = 0.2;
 
 interface RecordState {
   entity: Entity;
@@ -100,6 +102,12 @@ export class ListeningSystem extends createSystem({
   /** A hand is holding the radio, and how long for. */
   private talkingSource: XRInputSource | null = null;
   private talkStart = 0;
+  /** Hands pinching right at the tonearm or radio. Their rays must not also press what they point at. */
+  private nearPinches = new Set<XRInputSource>();
+  private lastNearPinchEnd = -10;
+  /** Counts every change of record, so a slow reply can tell it has been overtaken. */
+  private recordMoves = 0;
+  private introTimer = 0;
   readonly history = new ListeningHistory();
   /** Catalog index of tonight's featured record: the one that glows. */
   private featured = 0;
@@ -173,15 +181,26 @@ export class ListeningSystem extends createSystem({
     this.cleanupFuncs.push(
       this.queries.grabbed.subscribe('qualify', (entity) => this.onGrab(entity)),
       this.queries.grabbed.subscribe('disqualify', (entity) => this.onRelease(entity)),
-      this.queries.pressed.subscribe('disqualify', (entity) => this.onPress(entity)),
-      this.queries.armPressed.subscribe('disqualify', () => this.onTonearm()),
-      this.queries.radioPressed.subscribe('disqualify', () => this.onRadio()),
+      this.queries.pressed.subscribe('disqualify', (entity) => {
+        if (this.isRayPress()) this.onPress(entity);
+      }),
+      this.queries.armPressed.subscribe('disqualify', () => {
+        if (this.isRayPress()) this.onTonearm();
+      }),
+      this.queries.radioPressed.subscribe('disqualify', () => {
+        if (this.isRayPress()) this.onRadio();
+      }),
       this.world.visibilityState.subscribe((state) => this.onVisibility(state)),
     );
 
     const onEnded = () => this.endTrack();
+    const onAudioError = () => this.dropFailedRecord();
     this.audio.element.addEventListener('ended', onEnded);
-    this.cleanupFuncs.push(() => this.audio.element.removeEventListener('ended', onEnded));
+    this.audio.element.addEventListener('error', onAudioError);
+    this.cleanupFuncs.push(() => {
+      this.audio.element.removeEventListener('ended', onEnded);
+      this.audio.element.removeEventListener('error', onAudioError);
+    });
 
     // Any pinch counts as the gesture browsers require before sound can start.
     const unlock = () => this.audio.unlock();
@@ -191,13 +210,17 @@ export class ListeningSystem extends createSystem({
       const side = event.inputSource.handedness;
       if (!event.inputSource.hand || (side !== 'left' && side !== 'right')) return;
       this.player.indexTipSpaces[side].getWorldPosition(this.tmpTip);
-      if (this.distanceToArm(this.tmpTip) < TONEARM_PINCH) this.onTonearm();
-      else if (this.tmpTip.distanceTo(this.radioPos) < RADIO_PINCH) {
+      if (this.distanceToArm(this.tmpTip) < TONEARM_PINCH) {
+        this.nearPinches.add(event.inputSource);
+        this.onTonearm();
+      } else if (this.tmpTip.distanceTo(this.radioPos) < RADIO_PINCH) {
+        this.nearPinches.add(event.inputSource);
         if (this.mic.ready && this.host.onSpoken) this.startTalking(event.inputSource);
         else this.onRadio();
       }
     };
     const onSelectEnd = (event: XRInputSourceEvent) => {
+      if (this.nearPinches.delete(event.inputSource)) this.lastNearPinchEnd = this.now;
       if (event.inputSource === this.talkingSource) void this.stopTalking();
     };
     const onSession = () => {
@@ -205,6 +228,8 @@ export class ListeningSystem extends createSystem({
       session?.addEventListener('selectstart', onSelectStart);
       session?.addEventListener('selectend', onSelectEnd);
       session?.addEventListener('squeezestart', unlock);
+      // The finished pinch too: a session entered from the browser's own button has had no click yet.
+      session?.addEventListener('select', unlock);
     };
     this.world.renderer.xr.addEventListener('sessionstart', onSession);
     this.cleanupFuncs.push(() => this.world.renderer.xr.removeEventListener('sessionstart', onSession));
@@ -343,27 +368,43 @@ export class ListeningSystem extends createSystem({
     this.talkingSource = source;
     this.talkStart = this.now;
     this.mic.start();
-    this.audio.duck(true);
+    this.audio.duck(true, 'listener');
   }
 
   private async stopTalking(): Promise<void> {
     this.talkingSource = null;
     const heldFor = this.now - this.talkStart;
     const clip = await this.mic.stop();
-    this.audio.duck(false);
-    if (heldFor < TALK_MIN_SECONDS || !clip || !this.host.onSpoken) {
+    this.audio.duck(false, 'listener');
+    if (heldFor < TALK_MIN_SECONDS || !clip?.size || !this.host.onSpoken) {
       this.onRadio();
       return;
     }
     if (this.asking) return;
     this.asking = true;
+    const moves = this.recordMoves;
     try {
       this.captions.show('...');
       const reply = await this.host.onSpoken(clip, this.context());
-      this.act(reply ?? (await this.host.onRequest('surprise me', this.context())));
+      const answer = reply ?? (await this.host.onRequest('surprise me', this.context()));
+      if (moves === this.recordMoves) this.act(answer);
     } finally {
       this.asking = false;
     }
+  }
+
+  /** The session ended or the menu opened mid-hold: nothing was asked, and selectend may never come. */
+  private cancelTalking(): void {
+    this.nearPinches.clear();
+    if (!this.talkingSource) return;
+    this.talkingSource = null;
+    this.mic.cancel();
+    this.audio.duck(false, 'listener');
+  }
+
+  /** False for the ray of a hand pinching right at the tonearm or radio: that pinch was already handled. */
+  private isRayPress(): boolean {
+    return this.nearPinches.size === 0 && this.now - this.lastNearPinchEnd > NEAR_PINCH_GRACE;
   }
 
   /** Carries out what the host decided. The record moves first, the words follow. */
@@ -372,7 +413,8 @@ export class ListeningSystem extends createSystem({
     if (reply.action === 'resume' && this.current >= 0 && this.paused) this.togglePause();
     if (reply.play) {
       const index = TRACKS.findIndex((t) => t.id === reply.play);
-      if (index >= 0 && index !== this.current) this.load(index, false);
+      if (index === this.current && this.paused) this.togglePause();
+      else if (index >= 0 && index !== this.current) this.load(index, false);
     }
     if (reply.line) void this.host.say(reply.line, undefined, this.host instanceof CloudHost ? this.host.backupFor(reply) : undefined);
   }
@@ -389,8 +431,11 @@ export class ListeningSystem extends createSystem({
   async ask(text: string): Promise<void> {
     if (this.asking) return;
     this.asking = true;
+    const moves = this.recordMoves;
     try {
-      this.act(await this.host.onRequest(text, this.context()));
+      const reply = await this.host.onRequest(text, this.context());
+      // The listener changed the record while the host was thinking: theirs stands.
+      if (moves === this.recordMoves) this.act(reply);
     } finally {
       this.asking = false;
     }
@@ -475,6 +520,7 @@ export class ListeningSystem extends createSystem({
   private onGrab(entity: Entity): void {
     const index = this.indexOf(entity);
     this.held = index;
+    this.recordMoves++;
     this.everGrabbed = true;
     this.records[index].flying = false;
     this.audio.unlock();
@@ -519,6 +565,7 @@ export class ListeningSystem extends createSystem({
 
   private load(index: number, announce = true): void {
     if (this.current >= 0 && this.current !== index) this.flyHome(this.current);
+    this.recordMoves++;
     this.current = index;
     this.paused = false;
     const record = this.records[index];
@@ -541,13 +588,16 @@ export class ListeningSystem extends createSystem({
       this.halo.visible = false;
       this.fingerA.visible = false;
       this.fingerB.visible = false;
+      // The cue was leaning this one out of the shelf: it goes back if another record went on.
+      if (index !== this.featured) this.flyHome(this.featured);
     }
   }
 
   private noteStart(track: Track, announce: boolean): void {
     this.history.recordPlay(track.id);
+    window.clearTimeout(this.introTimer);
     // A host-chosen record was already introduced in the host's reply.
-    if (announce) window.setTimeout(() => this.host.onTrackStart(track, this.context()), NEEDLE_DELAY * 1000 + 300);
+    if (announce) this.introTimer = window.setTimeout(() => this.host.onTrackStart(track, this.context()), NEEDLE_DELAY * 1000 + 300);
   }
 
   private togglePause(): void {
@@ -558,6 +608,7 @@ export class ListeningSystem extends createSystem({
   }
 
   private liftNeedle(): void {
+    window.clearTimeout(this.introTimer);
     this.current = -1;
     this.paused = false;
     this.audio.fadeOutThenPause();
@@ -578,11 +629,21 @@ export class ListeningSystem extends createSystem({
     }
   }
 
+  /** The audio would not load: take the record off rather than spin it in silence. */
+  private dropFailedRecord(): void {
+    const failed = this.current;
+    this.liftNeedle();
+    if (failed >= 0) this.flyHome(failed);
+  }
+
   private onVisibility(state: VisibilityState): void {
+    if (state !== VisibilityState.Visible) this.cancelTalking();
     if (state === VisibilityState.NonImmersive) {
       if (this.wasImmersive) {
         this.wasImmersive = false;
         this.recentered = false;
+        // Leaving through the system menu suspended the audio: the flat view needs it back.
+        this.audio.resumeFromBlur();
       }
       return;
     }
@@ -602,6 +663,8 @@ export class ListeningSystem extends createSystem({
     root.position.set(this.tmpV.x, this.tmpV.y - HEAD_Y, this.tmpV.z);
     root.rotation.set(0, Math.atan2(-this.tmpF.x, -this.tmpF.z), 0);
     this.placeInWorld();
+    // Everything just went to its new place: a flight in progress would head for the old one.
+    for (const record of this.records) record.flying = false;
     if (this.current >= 0) {
       const record = this.records[this.current];
       record.mesh.position.copy(this.standPos);
