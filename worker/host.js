@@ -11,7 +11,7 @@ const VOICE_NAME = 'Charon';
 // This format keeps the direction out of the speech. "Read this like..." got read aloud.
 const directed = (line) => `### DIRECTOR'S NOTES\nStyle: late night radio host alone in a small studio, low, warm, unhurried, close to the microphone, a little smile in it.\n\n### TRANSCRIPT\n${line}`;
 const API = 'https://generativelanguage.googleapis.com/v1beta/models';
-const ORIGINS = [/^https:\/\/nobanks\.github\.io$/, /^https?:\/\/localhost(:\d+)?$/, /^https?:\/\/127\.0\.0\.1(:\d+)?$/];
+const ORIGINS = [/^https:\/\/listen\.nohumannearby\.com$/, /^https:\/\/nobanks\.github\.io$/, /^https?:\/\/localhost(:\d+)?$/, /^https?:\/\/127\.0\.0\.1(:\d+)?$/];
 const MAX_BODY = 1_500_000;
 const LIMIT_PER_MINUTE = 30;
 const IDS = catalog.map((t) => t.id);
@@ -30,7 +30,7 @@ const shelf = () =>
 
 const SYSTEM = `You are the host of a small private listening room, late at night. One radio, one turntable, one shelf of records by the artist NoBanks Nearby. You choose records and talk to one listener at a time.
 
-Voice: warm, dry, few words. Like a friend who runs the place and has heard it all. Under 16 words, written to be spoken aloud. Plain everyday words, always contractions (it's, let's, don't), no hyphens or dashes, no hype, no puns on a title. Answer the person first, then name the record. When you put a record on, always say its title. Write something new every time, in your own words, about this person and this moment. Vary your choice: do not lean on the same record, and favor what this listener has not heard yet.
+Voice: warm, dry, few words. Like a friend who runs the place and has heard it all. Under 16 words, written to be spoken aloud. Plain everyday words, spoken the way a person talks, no hyphens or dashes, no hype, no puns on a title. Never open a line with "It's", "Let's" or "Here's", and never open with the word your last line opened with. Answer the person first, then name the record. When you put a record on, always say its title. Write something new every time, in your own words, about this person and this moment. Vary your choice: do not lean on the same record, and favor what this listener has not heard yet.
 
 Rules that are never broken:
 - You may only state the facts listed for each record. Never invent an instrument, a mood, a story, a date, or anything about the artist. If Sound is UNKNOWN, talk about the title or the sleeve instead.
@@ -41,7 +41,7 @@ Rules that are never broken:
 Actions:
 - wants_music: true only if they asked for music or a record, or a record just ended. A question about a record is false.
 - play: the id of the record to put on, or "none" to leave things alone.
-- action: "pause" or "resume" if that is what they want, else "none".
+- action: "pause" or "resume" if that is what they want, else "none". With either one, play is "none" and the line names no record.
 - heard: for spoken requests, what they said. Else empty.
 - If the audio is silent or unclear, pick something fitting and say so lightly.`;
 
@@ -119,14 +119,19 @@ async function brain(env, body) {
   const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) return null;
   const out = JSON.parse(text);
-  const line = String(out.line ?? '').replace(/\s*[–—]\s*/g, ', ').trim();
+  let line = String(out.line ?? '').replace(/\s*[–—]\s*/g, ', ').trim();
   if (BANNED.test(line) || line.length > 160) return null;
+  // Titles are spoken and captioned the way the sleeve spells them.
+  for (const { title } of catalog) line = line.replace(new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), title);
+  // The model sometimes names a record while pausing, which sounds like it is putting one on.
+  if ((out.action === 'pause' || out.action === 'resume') && catalog.some((t) => line.includes(t.title))) line = out.action === 'pause' ? 'Holding it.' : 'Back to it.';
   const reply = { line };
   // The model sometimes plays a record it was only asked about.
   const asked = String(body.text || out.heard || '');
   const justAQuestion = /^\s*(what|which|who|how|why|when|where|is|does|did)\b/i.test(asked) && !/\b(play|put|spin|something|anything|got)\b/i.test(asked);
-  if (IDS.includes(out.play) && out.wants_music && !justAQuestion && body.event !== 'cold_start') reply.play = out.play;
-  if (out.action === 'pause' || out.action === 'resume') reply.action = out.action;
+  const pausing = out.action === 'pause' || out.action === 'resume';
+  if (IDS.includes(out.play) && out.wants_music && !justAQuestion && !pausing && body.event !== 'cold_start') reply.play = out.play;
+  if (pausing) reply.action = out.action;
   if (out.heard) reply.heard = String(out.heard).slice(0, 200);
   return reply;
 }
