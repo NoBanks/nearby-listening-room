@@ -18,17 +18,19 @@ export const GREETINGS = ['Late one, huh.', 'Evening.', 'Hey there.'];
 
 /** Every line to record, given the titles and intros on the shelf. */
 export function allLines(tracks: readonly { title: string; intro?: string }[]): string[] {
-  const lines = [...GREETINGS.map(LINES.firstVisit), LINES.nudge, LINES.hold, LINES.hint];
-  for (const { title, intro } of tracks) {
-    lines.push(
-      intro || `${title}.`,
-      LINES.backLast(title),
-      LINES.backTonight(title),
-      LINES.thatWas(title),
-      LINES.comingUp(title),
-      LINES.unheard(title),
-      LINES.myPick(title),
-    );
-  }
-  return lines;
+  // Most-heard first: recording is rationed, so the first minutes get a voice first.
+  const each = (line: (track: { title: string; intro?: string }) => string) => tracks.map(line);
+  return [
+    ...GREETINGS.map(LINES.firstVisit),
+    LINES.nudge,
+    ...each(({ title, intro }) => intro || `${title}.`),
+    LINES.hint,
+    LINES.hold,
+    ...each(({ title }) => LINES.thatWas(title)),
+    ...each(({ title }) => LINES.comingUp(title)),
+    ...each(({ title }) => LINES.backTonight(title)),
+    ...each(({ title }) => LINES.backLast(title)),
+    ...each(({ title }) => LINES.unheard(title)),
+    ...each(({ title }) => LINES.myPick(title)),
+  ];
 }

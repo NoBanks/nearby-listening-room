@@ -1,6 +1,8 @@
 // Records the host's fixed lines with a stock Gemini voice, one mp3 per line.
 // Local dev tool: needs GEMINI_API_KEY in the environment, outputs are committed.
-// Safe to stop and rerun: finished lines are skipped. Waits out rate limits.
+// Safe to stop and rerun: finished lines are skipped. Every line uses one model so
+// the voice stays the same. Waits out per-minute limits, moves to the next project's
+// key on a daily limit (GEMINI_KEYS, comma separated), and exits when all are spent.
 // Usage: node --experimental-strip-types tools/build-voicebank.mjs <VoiceName> [maxLines]
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -15,8 +17,8 @@ const OUT = path.join(ROOT, 'public/voice');
 const BANK = path.join(ROOT, 'src/host/voice-bank.json');
 const VOICE = process.argv[2];
 const MAX = Number(process.argv[3] || Infinity);
-const KEY = process.env.GEMINI_API_KEY;
-if (!VOICE || !KEY) throw new Error('usage: build-voicebank <VoiceName> [maxLines], with GEMINI_API_KEY set');
+const KEYS = (process.env.GEMINI_KEYS || process.env.GEMINI_API_KEY || '').split(',').filter(Boolean);
+if (!VOICE || !KEYS.length) throw new Error('usage: build-voicebank <VoiceName> [maxLines], with GEMINI_KEYS set');
 
 const DIRECTION =
   'Read this like a late night radio host alone in a small studio: low, warm, unhurried, close to the microphone, a little smile in it. Never announcer-y. Say only: ';
@@ -30,12 +32,13 @@ const bank = fs.existsSync(BANK) ? JSON.parse(fs.readFileSync(BANK, 'utf8')) : {
 
 async function record(line, file) {
   for (;;) {
+    if (!KEYS.length) return false;
     let response;
     try {
       response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
         method: 'POST',
         signal: AbortSignal.timeout(60000),
-        headers: { 'x-goog-api-key': KEY, 'Content-Type': 'application/json' },
+        headers: { 'x-goog-api-key': KEYS[0], 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: DIRECTION + line }] }],
           generationConfig: {
@@ -48,12 +51,21 @@ async function record(line, file) {
       await sleep(15000);
       continue;
     }
-    if (response.status === 429 || response.status >= 500) {
-      console.log('waiting', response.status);
-      await sleep(65000);
+    if (response.status >= 500) {
+      await sleep(30000);
       continue;
     }
     const json = await response.json();
+    if (response.status === 429) {
+      if (JSON.stringify(json).includes('PerDay')) {
+        KEYS.shift();
+        console.log('daily limit reached, keys left:', KEYS.length);
+      } else {
+        console.log('waiting out the per-minute limit');
+        await sleep(65000);
+      }
+      continue;
+    }
     const part = json.candidates?.[0]?.content?.parts?.[0]?.inlineData;
     if (!part) throw new Error(`no audio for "${line}": ${response.status}`);
     const tmp = `${file}.bin`;
@@ -65,7 +77,7 @@ async function record(line, file) {
       { windowsHide: true },
     );
     fs.unlinkSync(tmp);
-    return;
+    return true;
   }
 }
 
@@ -74,7 +86,10 @@ for (const line of lines) {
   if (done >= MAX) break;
   const name = `${createHash('sha1').update(`${VOICE}|${line}`).digest('hex').slice(0, 12)}.mp3`;
   if (bank[line] === `voice/${name}` && fs.existsSync(path.join(OUT, name))) continue;
-  await record(line, path.join(OUT, name));
+  if (!(await record(line, path.join(OUT, name)))) {
+    console.log('all daily limits spent, rerun tomorrow');
+    break;
+  }
   bank[line] = `voice/${name}`;
   fs.writeFileSync(BANK, `${JSON.stringify(bank, null, 2)}\n`);
   done++;
