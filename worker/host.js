@@ -154,7 +154,7 @@ async function brain(env, body) {
   // Titles are spoken and captioned the way the sleeve spells them.
   for (const { title } of catalog) line = line.replace(new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), title);
   // The model sometimes names a record while pausing, which sounds like it is putting one on.
-  if ((out.action === 'pause' || out.action === 'resume') && catalog.some((t) => line.includes(t.title))) line = out.action === 'pause' ? 'Holding it.' : 'Back to it.';
+  if (out.action === 'pause' && catalog.some((t) => line.includes(t.title))) line = 'Holding it.';
   const reply = { line };
   // The model sometimes plays a record it was only asked about.
   const asked = String(body.text || out.heard || '');
@@ -162,8 +162,9 @@ async function brain(env, body) {
   // With a record paused, "keep going" can only mean that record, whatever the model picked.
   if (body.context?.paused && /\b(keep going|go on|carry on|continue|resume|unpause)\b/i.test(asked)) {
     out.action = 'resume';
-    if (catalog.some((t) => reply.line.includes(t.title))) reply.line = 'Back to it.';
   }
+  // Picking back up needs no new words, and the model's tend to wander.
+  if (out.action === 'resume') reply.line = 'Back to it.';
   const pausing = out.action === 'pause' || out.action === 'resume';
   if (IDS.includes(out.play) && out.wants_music && !justAQuestion && !pausing && body.event !== 'cold_start') reply.play = out.play;
   if (pausing) reply.action = out.action;
