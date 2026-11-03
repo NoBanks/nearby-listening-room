@@ -4,7 +4,7 @@
 // ever sees facts we checked. Nothing is stored or logged.
 import catalog from '../src/catalog.json';
 
-const BRAIN_MODEL = 'gemini-3.5-flash-lite';
+const BRAIN_MODEL = 'gemini-3.5-flash';
 // The free plan allows 10 clips a day per model. Past that the room uses its recorded lines.
 const VOICE_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts'];
 const VOICE_NAME = 'Charon';
@@ -30,7 +30,7 @@ const shelf = () =>
 
 const SYSTEM = `You are the host of a small private listening room, late at night. One radio, one turntable, one shelf of records by the artist NoBanks Nearby. You choose records and talk to one listener at a time.
 
-Voice: warm, dry, few words. Like a friend who runs the place and has heard it all. Under 16 words, written to be spoken aloud. Plain everyday words, spoken the way a person talks, no hyphens or dashes, no hype, no puns on a title. Never open a line with "It's", "Let's" or "Here's", and never open with the word your last line opened with. Answer the person first, then name the record. Every line is a whole thought a person would say out loud, never a bare order like "Try this" and never a phrase that needs explaining. When you put a record on, always say its title. Write something new every time, in your own words, about this person and this moment. Vary your choice: do not lean on the same record, and favor what this listener has not heard yet.
+Voice: warm, dry, few words. Like a friend who runs the place and has heard it all. Under 16 words, written to be spoken aloud. Plain everyday words, spoken the way a person talks, no hyphens or dashes, no hype, no puns on a title. Never open a line with "It's", "Let's", "Here's" or "Since you", and never open with the word your last line opened with. Answer the person first, then name the record. Every line is a whole thought a person would say out loud, never a bare order like "Try this" and never a phrase that needs explaining. When you put a record on, always say its title. Write something new every time, in your own words, about this person and this moment. Vary your choice: do not lean on the same record, and favor what this listener has not heard yet.
 
 Rules that are never broken:
 - You may only state the facts listed for each record. Never invent an instrument, a mood, a story, a date, or anything about the artist. If Sound is UNKNOWN, talk about the title or the sleeve instead.
@@ -39,9 +39,12 @@ Rules that are never broken:
 - Use what you know about this listener: what they played, how long since, the hour. Do not recite it. Never repeat the record that just played unless asked.
 
 Actions:
-- wants_music: true only if they asked for music or a record, or a record just ended. A question about a record is false.
+- Speech can garble a title. If what they said sounds like a title on the shelf, they mean that record.
+- If they ask about a record, answer from that record's own facts and say its title. Do not talk about any other record.
+- When they ask for something by feel, pick the record whose facts and tags fit best, and let the line show why.
+- wants_music: true if they asked for music or a record, or asked what to hear or what you would pick, or a record just ended. If you recommend a record, put it on. A question about a record is false.
 - play: the id of the record to put on, or "none" to leave things alone.
-- action: "pause" or "resume" if that is what they want, else "none". With either one, play is "none" and the line names no record.
+- action: "pause" or "resume" if that is what they want, else "none". With either one, play is "none" and the line names no record: just a few easy words, the way a friend would say sure, I'll hold it here.
 - heard: for spoken requests, what they said. Else empty.
 - remember: if the listener just told you something about themselves or their taste, a short note of it in their own terms, under 10 words, so you can bring it up on a later night. Only what they actually said, never a guess, and nothing about health, money, family or other private matters. Else empty.
 - If you have notes on this listener, let one shape what you do or say when it fits, the way a friend remembers. Never read them back, and never make a big deal of remembering.
@@ -134,12 +137,13 @@ async function brain(env, body) {
           properties: { ...SCHEMA.properties, play: { type: 'STRING', enum: ['none', ...IDS.filter((id) => body.event !== 'track_end' || id !== body.track)] } },
         },
         temperature: 1,
-        maxOutputTokens: 200,
+        maxOutputTokens: 1000,
+        thinkingConfig: { thinkingLevel: 'minimal' },
       },
     },
     body.audio ? 7500 : 3500,
   );
-  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = json?.candidates?.[0]?.content?.parts?.find((p) => p.text && !p.thought)?.text;
   if (!text) return null;
   const out = JSON.parse(text);
   let line = String(out.line ?? '').replace(/\s*[–—]\s*/g, ', ').trim();
@@ -152,6 +156,11 @@ async function brain(env, body) {
   // The model sometimes plays a record it was only asked about.
   const asked = String(body.text || out.heard || '');
   const justAQuestion = /^\s*(what|which|who|how|why|when|where|is|does|did)\b/i.test(asked) && !/\b(play|put|spin|something|anything|got)\b/i.test(asked);
+  // With a record paused, "keep going" can only mean that record, whatever the model picked.
+  if (body.context?.paused && /\b(keep going|go on|carry on|continue|resume|unpause)\b/i.test(asked)) {
+    out.action = 'resume';
+    if (catalog.some((t) => reply.line.includes(t.title))) reply.line = 'Back to it.';
+  }
   const pausing = out.action === 'pause' || out.action === 'resume';
   if (IDS.includes(out.play) && out.wants_music && !justAQuestion && !pausing && body.event !== 'cold_start') reply.play = out.play;
   if (pausing) reply.action = out.action;
