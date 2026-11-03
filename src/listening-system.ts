@@ -25,6 +25,7 @@ import { RoomAudio } from './audio.js';
 import { coverAssetId, resolveUrl, type Track, TRACKS } from './catalog.js';
 import {
   buildRoom,
+  gatherBoxFaces,
   HEAD_Y,
   PLATTER,
   RADIO,
@@ -60,6 +61,10 @@ const ARM_END = -0.62;
 const RPM_33 = (33.33 / 60) * Math.PI * 2;
 const NEEDLE_DELAY = 0.9;
 const DIM = 0.13;
+/** An additive layer this faint adds under half a step of 8-bit colour: skipping it cannot show. */
+const INVISIBLE_OPACITY = 0.001;
+/** Frames every layer keeps drawing after a view starts, so its shader compiles then and not mid-song. */
+const SHADER_WARMUP_FRAMES = 3;
 /** A fingertip this close to a sleeve or the tonearm lights it up. */
 const NEAR = 0.16;
 const TONEARM_PINCH = 0.075;
@@ -151,6 +156,10 @@ export class ListeningSystem extends createSystem({
   private handHaloMaterials: MeshBasicMaterial[] = [];
   private armHit!: Mesh;
   private armGlow!: Sprite;
+  /** Additive layers that spend long stretches at zero. */
+  private fadeLayers: { visible: boolean; opacity: number }[] = [];
+  private warmupFrames = 0;
+  private warmedForXR = false;
   private lastArmToggle = -10;
   private palm = new PalmGesture();
   private tmpTip = new Vector3();
@@ -172,6 +181,9 @@ export class ListeningSystem extends createSystem({
     this.featured = TRACKS.indexOf(featured);
     shelfOrder(TRACKS, featured, recent).forEach((index, slot) => (this.slotOf[index] = slot));
     this.parts = buildRoom();
+    // Up front, on the landing page: the alternative is a 1024 px upload and its
+    // mipmaps inside the headset, on the very frame the first record drops.
+    this.world.renderer.initTexture(this.parts.vinylGrooves);
     this.world.createTransformEntity(this.parts.root);
     this.buildRecords();
     this.buildCue();
@@ -238,8 +250,9 @@ export class ListeningSystem extends createSystem({
   }
 
   private buildRecords(): void {
-    const geometry = new BoxGeometry(SLEEVE_SIZE, SLEEVE_SIZE, 0.006);
     const side = new MeshBasicMaterial({ color: 0x120c08 });
+    // Every sleeve shares this layout: card edges and back in one draw, the cover in another.
+    const geometry = gatherBoxFaces(new BoxGeometry(SLEEVE_SIZE, SLEEVE_SIZE, 0.006), [side, side, side, side, null, side]);
     const hitGeometry = new PlaneGeometry(SLEEVE_SIZE, SLEEVE_SIZE);
     // Never drawn (no draw call) but still answers rays and clicks.
     const hitMaterial = new MeshBasicMaterial({ visible: false });
@@ -326,6 +339,14 @@ export class ListeningSystem extends createSystem({
     this.armGlow.scale.setScalar(0.11);
     this.armGlow.raycast = () => {};
     this.parts.root.add(this.armGlow);
+    const { windowPulse, lampGlow, dustMaterial, dropRing } = this.parts;
+    this.fadeLayers = [
+      windowPulse,
+      lampGlow.material as SpriteMaterial,
+      dustMaterial,
+      dropRing.material as MeshBasicMaterial,
+      this.armGlow.material as SpriteMaterial,
+    ];
     this.armHit = new Mesh(new BoxGeometry(0.07, 0.06, 0.32), new MeshBasicMaterial({ visible: false }));
     this.armHit.name = 'Tonearm';
     const entity = this.world.createTransformEntity(this.armHit);
@@ -575,8 +596,9 @@ export class ListeningSystem extends createSystem({
     const track = TRACKS[index];
     if (import.meta.env.DEV) console.info(`[room] load ${track.title}`);
     const { vinyl, vinylLabel, plaque, powerLed } = this.parts;
+    // Only the first map changes the shader; after that it is a plain texture swap.
+    if (!vinylLabel.map) vinylLabel.needsUpdate = true;
     vinylLabel.map = record.material.map;
-    vinylLabel.needsUpdate = true;
     vinyl.visible = true;
     plaque.draw(track.title);
     powerLed.color.set(0xff5a28);
@@ -741,6 +763,23 @@ export class ListeningSystem extends createSystem({
     this.parts.tonearm.getWorldQuaternion(this.armHit.quaternion);
   }
 
+  /**
+   * A fully faded layer costs the same fill as a bright one unless it is skipped.
+   * All of them still draw briefly whenever a view starts: on Quest, entering XR
+   * rebuilds every shader for multiview, and a layer skipped through that moment
+   * would compile the first time it lights up instead, which is the first record.
+   */
+  private skipUnseenLayers(): void {
+    const presenting = this.world.renderer.xr.isPresenting;
+    if (presenting !== this.warmedForXR) {
+      this.warmedForXR = presenting;
+      this.warmupFrames = 0;
+    }
+    const warming = this.warmupFrames < SHADER_WARMUP_FRAMES;
+    if (warming) this.warmupFrames++;
+    for (const layer of this.fadeLayers) layer.visible = warming || layer.opacity > INVISIBLE_OPACITY;
+  }
+
   update(delta: number, time: number): void {
     this.now = time;
     this.recenter();
@@ -817,6 +856,7 @@ export class ListeningSystem extends createSystem({
     ringMaterial.opacity += (ring - ringMaterial.opacity) * Math.min(1, delta * 10);
 
     this.updateAffordances(delta);
+    this.skipUnseenLayers();
 
     // Records in flight
     const ease = 1 - Math.exp(-delta * 7);
