@@ -380,6 +380,7 @@ export class ListeningSystem extends createSystem({
       hour: new Date().getHours(),
       playing: TRACKS[this.current]?.id,
       paused: this.paused,
+      notes: this.history.notes,
     };
   }
 
@@ -430,6 +431,7 @@ export class ListeningSystem extends createSystem({
 
   /** Carries out what the host decided. The record moves first, the words follow. */
   private act(reply: HostReply): void {
+    if (reply.remember) this.history.remember(reply.remember);
     if (reply.action === 'pause' && this.current >= 0 && !this.paused) this.togglePause();
     if (reply.action === 'resume' && this.current >= 0 && this.paused) this.togglePause();
     if (reply.play) {

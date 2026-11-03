@@ -1,9 +1,11 @@
-// Listening history, kept in this browser only (localStorage). Nothing leaves
-// the device. Every read and write tolerates storage being unavailable.
+// Listening history, kept in this browser only (localStorage). The cloud host gets
+// it with each request and keeps nothing. Every read and write tolerates storage
+// being unavailable.
 import type { Track } from './catalog.js';
 
 const KEY = 'nlr.history.v1';
 const MAX_PLAYS = 300;
+const MAX_NOTES = 6;
 /** Nights roll over at 6 am local, so a session past midnight is still "tonight". */
 const NIGHT_STARTS_HOUR = 6;
 
@@ -16,10 +18,11 @@ interface Stored {
   plays: Play[];
   visits: number;
   lastVisit: number;
+  notes: string[];
 }
 
 export class ListeningHistory {
-  private data: Stored = { plays: [], visits: 0, lastVisit: 0 };
+  private data: Stored = { plays: [], visits: 0, lastVisit: 0, notes: [] };
   /** Snapshot taken when the room opened, before this visit's plays. */
   readonly previousLast: string | undefined;
   readonly firstVisit: boolean;
@@ -34,6 +37,7 @@ export class ListeningHistory {
         }
         this.data.visits = Number(parsed.visits) || 0;
         this.data.lastVisit = Number(parsed.lastVisit) || 0;
+        if (Array.isArray(parsed.notes)) this.data.notes = parsed.notes.filter((n) => typeof n === 'string');
       }
     } catch {
       // Corrupt or blocked: start fresh.
@@ -56,6 +60,16 @@ export class ListeningHistory {
   recordPlay(id: string): void {
     this.data.plays.push({ id, at: Date.now() });
     if (this.data.plays.length > MAX_PLAYS) this.data.plays.splice(0, this.data.plays.length - MAX_PLAYS);
+    this.save();
+  }
+
+  /** What the host has kept about this listener, newest first. */
+  get notes(): readonly string[] {
+    return this.data.notes;
+  }
+
+  remember(note: string): void {
+    this.data.notes = [note, ...this.data.notes.filter((n) => n !== note)].slice(0, MAX_NOTES);
     this.save();
   }
 

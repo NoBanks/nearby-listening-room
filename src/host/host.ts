@@ -21,6 +21,8 @@ export interface HostContext {
   playing?: string;
   /** Whether that record is paused. */
   paused?: boolean;
+  /** Short notes the host kept from what this listener told it, newest first. */
+  notes?: readonly string[];
 }
 
 /** A host's answer to a request. Every field is optional. */
@@ -33,6 +35,8 @@ export interface HostReply {
   action?: 'pause' | 'resume';
   /** What the listener was heard to say, when the request was spoken. */
   heard?: string;
+  /** Something the listener said about themselves, to bring up on a later visit. */
+  remember?: string;
 }
 
 /** Where the host's words go: captions always, a voice when one is available. */
