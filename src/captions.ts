@@ -4,7 +4,7 @@ import { CanvasTexture, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, 
 // follow the head lazily, like subtitles; in the flat view they are DOM text.
 
 const WIDTH = 1024;
-const HEIGHT = 200;
+const HEIGHT = 260;
 const STORAGE_KEY = 'nlr.captions';
 
 export class Captions {
@@ -104,9 +104,15 @@ export class Captions {
   private draw(text: string): void {
     const { g } = this;
     g.clearRect(0, 0, WIDTH, HEIGHT);
+    // A long fresh line gets smaller type, never cut off.
     g.font = `500 46px Georgia, 'Times New Roman', serif`;
-    const lines = this.wrap(text, WIDTH - 90);
-    const lineHeight = 58;
+    let lines = this.wrap(text, WIDTH - 90);
+    let lineHeight = 58;
+    if (lines.length > 3) {
+      g.font = `500 36px Georgia, 'Times New Roman', serif`;
+      lines = this.wrap(text, WIDTH - 90);
+      lineHeight = 46;
+    }
     const boxHeight = lines.length * lineHeight + 36;
     const top = (HEIGHT - boxHeight) / 2;
     g.fillStyle = 'rgba(12,8,6,0.82)';
@@ -132,6 +138,6 @@ export class Captions {
       } else line = next;
     }
     if (line) lines.push(line);
-    return lines.slice(0, 2);
+    return lines;
   }
 }
