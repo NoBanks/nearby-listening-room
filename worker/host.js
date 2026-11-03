@@ -88,15 +88,33 @@ function situation(body) {
   return facts.join('\n');
 }
 
+// Keys that hit a limit, per model, so this instance stops trying them for a while.
+const resting = new Map();
+const REST_MS = 10 * 60 * 1000;
+const MAX_KEY_TRIES = 8;
+
 async function gemini(env, model, payload, ms) {
-  const response = await fetch(`${API}/${model}:generateContent`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(ms),
-    headers: { 'x-goog-api-key': env.GEMINI_API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) return null;
-  return response.json();
+  const deadline = Date.now() + ms;
+  const keys = String(env.GEMINI_KEYS || env.GEMINI_API_KEY).split(',').filter(Boolean);
+  const start = Math.floor(Math.random() * keys.length);
+  const order = keys.map((_, i) => keys[(start + i) % keys.length]);
+  const ready = order.filter((key) => (resting.get(`${model}|${key}`) ?? 0) < Date.now());
+  for (const key of ready.slice(0, MAX_KEY_TRIES)) {
+    const left = deadline - Date.now();
+    if (left < 300) return null;
+    const response = await fetch(`${API}/${model}:generateContent`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(left),
+      headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (response.status === 429) {
+      resting.set(`${model}|${key}`, Date.now() + REST_MS);
+      continue;
+    }
+    return response.ok ? response.json() : null;
+  }
+  return null;
 }
 
 async function brain(env, body) {
