@@ -4,6 +4,7 @@ import {
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
+  CanvasTexture,
   CircleGeometry,
   Color,
   CylinderGeometry,
@@ -59,6 +60,8 @@ export interface RoomParts {
   dimmable: { material: MeshBasicMaterial; lit: number; base: Color }[];
   vinyl: Group;
   vinylLabel: MeshBasicMaterial;
+  /** Hidden until the first record drops, so nothing draws it before then. */
+  vinylGrooves: CanvasTexture;
   platter: Mesh;
   tonearm: Group;
   /** The cartridge end of the arm: where a fingertip pinches to pause. */
@@ -110,6 +113,27 @@ function batch(pieces: { geometry: BufferGeometry; x: number; y: number; z: numb
   merged.setAttribute('normal', new Float32BufferAttribute(normal, 3));
   merged.setAttribute('uv', new Float32BufferAttribute(uv, 2));
   return merged;
+}
+
+/**
+ * A box given a material array costs one draw call per face. Puts each material's
+ * faces next to each other in the index, so it costs one per material instead.
+ */
+export function gatherBoxFaces(geometry: BufferGeometry, materials: readonly unknown[]): BufferGeometry {
+  const source = geometry.getIndex()!.array;
+  const faces = geometry.groups.slice();
+  const gathered: number[] = [];
+  geometry.clearGroups();
+  for (const material of new Set(materials)) {
+    const start = gathered.length;
+    for (const face of faces) {
+      if (materials[face.materialIndex!] !== material) continue;
+      for (let i = 0; i < face.count; i++) gathered.push(source[face.start + i]);
+    }
+    geometry.addGroup(start, gathered.length - start, materials.indexOf(material));
+  }
+  geometry.setIndex(gathered);
+  return geometry;
 }
 
 export function buildRoom(): RoomParts {
@@ -178,7 +202,7 @@ export function buildRoom(): RoomParts {
     rail.rotation.x = -Math.PI / 2;
   }
   const brass = basic({ color: 0x9c7a44 });
-  const posts = [-76, -38, 38, 76].map((degrees) => {
+  const brassPieces: { geometry: BufferGeometry; x: number; y: number; z: number }[] = [-76, -38, 38, 76].map((degrees) => {
     const a = (degrees * Math.PI) / 180;
     return {
       geometry: new CylinderGeometry(0.005, 0.005, 1.26 - DESK_Y + 0.17, 8),
@@ -187,15 +211,15 @@ export function buildRoom(): RoomParts {
       z: -Math.cos(a) * (SHELF_RADIUS + 0.03),
     };
   });
-  add(batch(posts), brass);
 
   // Turntable
   const brushed = basic({ map: brushedTexture() });
   const plinthBody = basic({ color: 0x24140b });
   const top = basic({ color: 0x17100c });
+  const plinthFaces = [plinthBody, plinthBody, top, plinthBody, plinthBody, plinthBody];
   add(
-    new BoxGeometry(0.46, PLINTH_H, 0.36),
-    [plinthBody, plinthBody, top, plinthBody, plinthBody, plinthBody],
+    gatherBoxFaces(new BoxGeometry(0.46, PLINTH_H, 0.36), plinthFaces),
+    plinthFaces,
     0,
     DESK_Y + PLINTH_H / 2,
     PLATTER.z,
@@ -206,7 +230,8 @@ export function buildRoom(): RoomParts {
   const vinyl = new Group();
   vinyl.position.set(PLATTER.x, PLATTER_Y, PLATTER.z);
   vinyl.visible = false;
-  const groove = new Mesh(new CircleGeometry(0.149, 64), basic({ map: vinylTexture() }));
+  const vinylGrooves = vinylTexture();
+  const groove = new Mesh(new CircleGeometry(0.149, 64), basic({ map: vinylGrooves }));
   groove.rotation.x = -Math.PI / 2;
   groove.raycast = () => {};
   const vinylLabel = basic({ color: 0xffffff });
@@ -249,7 +274,8 @@ export function buildRoom(): RoomParts {
 
   const dropRing = add(
     new RingGeometry(0.158, 0.172, 64),
-    new MeshBasicMaterial({ color: 0xffc27e, transparent: true, opacity: 0, side: DoubleSide, blending: AdditiveBlending, depthWrite: false }),
+    // Single pass: a two-sided transparent material otherwise draws twice and rebuilds its program state every frame.
+    new MeshBasicMaterial({ color: 0xffc27e, transparent: true, opacity: 0, side: DoubleSide, forceSinglePass: true, blending: AdditiveBlending, depthWrite: false }),
     PLATTER.x,
     PLATTER_Y + 0.002,
     PLATTER.z,
@@ -257,7 +283,7 @@ export function buildRoom(): RoomParts {
   dropRing.rotation.x = -Math.PI / 2;
 
   // Now-playing stand
-  add(new BoxGeometry(0.2, 0.012, 0.07), brass, STAND.x, DESK_Y + 0.006, STAND.z);
+  brassPieces.push({ geometry: new BoxGeometry(0.2, 0.012, 0.07), x: STAND.x, y: DESK_Y + 0.006, z: STAND.z });
 
   // Title plaque on the desk, in front of the turntable.
   const plaque = new TextPlaque(1024, 128);
@@ -294,8 +320,11 @@ export function buildRoom(): RoomParts {
   // Practical lamp, right of the desk.
   const lampX = 0.52;
   const lampZ = -0.2;
-  add(new CylinderGeometry(0.05, 0.058, 0.014, 24), brass, lampX, DESK_Y + 0.007, lampZ);
-  add(new CylinderGeometry(0.006, 0.006, 0.26, 10), brass, lampX, DESK_Y + 0.14, lampZ);
+  brassPieces.push(
+    { geometry: new CylinderGeometry(0.05, 0.058, 0.014, 24), x: lampX, y: DESK_Y + 0.007, z: lampZ },
+    { geometry: new CylinderGeometry(0.006, 0.006, 0.26, 10), x: lampX, y: DESK_Y + 0.14, z: lampZ },
+  );
+  add(batch(brassPieces), brass);
   const shadeMaterial = new MeshBasicMaterial({ map: lampShadeTexture(), side: DoubleSide });
   dimmable.push({ material: shadeMaterial, lit: 1, base: shadeMaterial.color.clone() });
   add(new CylinderGeometry(0.055, 0.095, 0.115, 28, 1, true), shadeMaterial, lampX, DESK_Y + 0.29, lampZ);
@@ -314,14 +343,8 @@ export function buildRoom(): RoomParts {
   radio.lookAt(0, HEAD_Y, 0);
   const radioBody = basic({ color: 0x24140b });
   const radioFace = basic({ map: radioFaceTexture() });
-  const radioMesh = new Mesh(new BoxGeometry(0.24, 0.15, 0.1), [
-    radioBody,
-    radioBody,
-    radioBody,
-    radioBody,
-    radioFace,
-    radioBody,
-  ]);
+  const radioFaces = [radioBody, radioBody, radioBody, radioBody, radioFace, radioBody];
+  const radioMesh = new Mesh(gatherBoxFaces(new BoxGeometry(0.24, 0.15, 0.1), radioFaces), radioFaces);
   radioMesh.raycast = () => {};
   radio.add(radioMesh);
   root.add(radio);
@@ -364,6 +387,7 @@ export function buildRoom(): RoomParts {
     dimmable,
     vinyl,
     vinylLabel,
+    vinylGrooves,
     platter,
     tonearm,
     headshell,
