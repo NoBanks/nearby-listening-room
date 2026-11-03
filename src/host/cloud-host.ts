@@ -23,7 +23,7 @@ import type { HostContext, HostOutput, HostReply, RadioHost } from './host.js';
 import { LINES } from './lines.js';
 import { ScriptedHost } from './scripted-host.js';
 
-const TIMEOUT_MS = 4000;
+const TIMEOUT_MS = 8000;
 const SPOKEN_TIMEOUT_MS = 8000;
 
 type HostEvent = 'cold_start' | 'track_end' | 'request';

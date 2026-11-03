@@ -5,6 +5,7 @@
 import catalog from '../src/catalog.json';
 
 const BRAIN_MODEL = 'gemini-3.5-flash';
+const BRAIN_BACKUP = 'gemini-3.5-flash-lite';
 // The free plan allows 10 clips a day per model. Past that the room uses its recorded lines.
 const VOICE_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts'];
 const VOICE_NAME = 'Charon';
@@ -123,9 +124,9 @@ async function gemini(env, model, payload, ms) {
 async function brain(env, body) {
   const parts = [{ text: situation(body) }];
   if (body.audio) parts.push({ inlineData: { mimeType: String(body.mime || 'audio/webm').split(';')[0], data: body.audio } });
-  const json = await gemini(
+  const ask = (model, ms) => gemini(
     env,
-    BRAIN_MODEL,
+    model,
     {
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts }],
@@ -141,8 +142,10 @@ async function brain(env, body) {
         thinkingConfig: { thinkingLevel: 'minimal' },
       },
     },
-    body.audio ? 7500 : 3500,
-  );
+    ms,
+  ).catch(() => null);
+  // A slow moment on the better model falls to the quick one, so the host still decides.
+  const json = (await ask(BRAIN_MODEL, 4500)) ?? (await ask(BRAIN_BACKUP, 3000));
   const text = json?.candidates?.[0]?.content?.parts?.find((p) => p.text && !p.thought)?.text;
   if (!text) return null;
   const out = JSON.parse(text);
@@ -155,7 +158,7 @@ async function brain(env, body) {
   const reply = { line };
   // The model sometimes plays a record it was only asked about.
   const asked = String(body.text || out.heard || '');
-  const justAQuestion = /^\s*(what|which|who|how|why|when|where|is|does|did)\b/i.test(asked) && !/\b(play|put|spin|something|anything|got)\b/i.test(asked);
+  const justAQuestion = /^\s*(what|which|who|how|why|when|where|is|does|did)\b/i.test(asked) && !/\b(play|put|spin|something|anything|got|hear|listen|pick|recommend|suggest)\b/i.test(asked);
   // With a record paused, "keep going" can only mean that record, whatever the model picked.
   if (body.context?.paused && /\b(keep going|go on|carry on|continue|resume|unpause)\b/i.test(asked)) {
     out.action = 'resume';
