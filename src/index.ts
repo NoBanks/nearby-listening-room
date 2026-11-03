@@ -1,4 +1,4 @@
-import { DefaultLoadingManager, World } from '@iwsdk/core';
+import { World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
 import { hostEndpoint } from './host/create-host.js';
 import { HostMic } from './host/mic.js';
@@ -8,7 +8,12 @@ import { ListeningSystem } from './listening-system.js';
 // a slow CDN would otherwise mean no hands in a room you use with your hands.
 const HAND_CDN = 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/';
 const HANDS = `${import.meta.env.BASE_URL}profiles/generic-hand/`;
-DefaultLoadingManager.setURLModifier((url) => (url.startsWith(HAND_CDN) ? HANDS + url.slice(HAND_CDN.length) : url));
+// The SDK's loader offers no setting for this path, so the request itself is rerouted.
+const realFetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+  const url = input instanceof Request ? input.url : String(input);
+  return realFetch(url.startsWith(HAND_CDN) ? HANDS + url.slice(HAND_CDN.length) : input, init);
+};
 for (const side of ['left', 'right']) void fetch(`${HANDS}${side}.glb`).catch(() => {});
 
 World.create(
