@@ -78,7 +78,8 @@ export class CloudHost implements RadioHost {
       reader.readAsDataURL(audio);
     });
     const reply = await this.ask('request', context, { audio: base64, mime: audio.type }, SPOKEN_TIMEOUT_MS);
-    return this.valid(reply);
+    // One wait is enough: a second trip to a slow worker would only add dead air.
+    return this.valid(reply) ?? this.fallback.onRequest('surprise me', context);
   }
 
   /** A recorded line to say if a fresh line about this reply cannot be voiced in time. */

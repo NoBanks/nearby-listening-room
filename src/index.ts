@@ -37,7 +37,7 @@ World.create(
   };
   enter.addEventListener('click', () => {
     room.audio.unlock();
-    leave();
+    // The card stays up until the session really starts, so a refused prompt can be tried again.
     world.launchXR();
   });
   flat.addEventListener('click', () => {
@@ -91,4 +91,6 @@ World.create(
   });
   if (!navigator.xr) enter.hidden = true;
   world.renderer.xr.addEventListener('sessionstart', leave);
+  // Back from the headset: the card is the way in again.
+  world.renderer.xr.addEventListener('sessionend', () => landing.classList.remove('gone'));
 });
