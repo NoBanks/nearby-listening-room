@@ -121,6 +121,20 @@ async function gemini(env, model, payload, ms) {
   return null;
 }
 
+// The model writes "I will" and "you are" even when told not to, and they sound stiff aloud.
+// Only contracted mid-sentence: "Yes, I will." stays whole.
+const CONTRACT = [
+  [/\b(I|you|we|they|he|she|it|that|there|what) will\b(?=\s+\w)/gi, "$1'll"],
+  [/\b(you|we|they) are\b(?=\s+\w)/gi, "$1're"],
+  [/\bI am\b(?=\s+\w)/g, "I'm"],
+  [/\b(it|that|there|what|here) is\b(?=\s+\w)/gi, "$1's"],
+  [/\bI would\b(?=\s+\w)/g, "I'd"],
+  [/\b(do|does|did|is|are|was|were|could|would|should) not\b/gi, "$1n't"],
+  [/\bwill not\b/gi, "won't"],
+  [/\bcan ?not\b/gi, "can't"],
+];
+const spoken = (line) => CONTRACT.reduce((text, [pattern, to]) => text.replace(pattern, to), line);
+
 async function brain(env, body) {
   const parts = [{ text: situation(body) }];
   if (body.audio) parts.push({ inlineData: { mimeType: String(body.mime || 'audio/webm').split(';')[0], data: body.audio } });
@@ -149,7 +163,7 @@ async function brain(env, body) {
   const text = json?.candidates?.[0]?.content?.parts?.find((p) => p.text && !p.thought)?.text;
   if (!text) return null;
   const out = JSON.parse(text);
-  let line = String(out.line ?? '').replace(/\s*[–—]\s*/g, ', ').trim();
+  let line = spoken(String(out.line ?? '').replace(/\s*[–—]\s*/g, ', ').trim());
   if (BANNED.test(line) || line.length > 160) return null;
   // Titles are spoken and captioned the way the sleeve spells them.
   for (const { title } of catalog) line = line.replace(new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), title);
