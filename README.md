@@ -8,7 +8,7 @@ Built for the Meta VR Start Developer Competition 2026 (Entertainment, New Exper
 
 - **Hands first.** Pinch a record within reach and carry it to the platter, or pinch from a distance with a hand ray. No controller needed. One hand does everything.
 - **Pause like a person.** Pinch the tonearm, or raise an open palm toward the room. Do it again to resume.
-- **Ask the radio.** Pinch the radio on the left of the desk and the host picks a record for you and puts it on.
+- **Ask the radio.** Pinch the radio on the left of the desk and the host picks a record for you and puts it on. If you enabled the optional microphone on the landing card, hold the radio and speak instead; let go and the host answers. This needs the cloud host (see below).
 - **Teaches without text.** The room opens dark with one glowing record, two fingertips showing the pinch, and a single captioned line from the host.
 - **Spatial sound.** The record sounds from the turntable, with the stereo pair either side of it keeping the mix wide. The host speaks from the radio and the music dips under the voice.
 - **Something to come back for.** The room remembers what you played. The shelf puts your recent records in your eyeline, and each night a different featured record glows.
@@ -83,7 +83,7 @@ Everything about a record lives in `src/catalog.json`. Changing records is a dat
 - `seconds` drives the tonearm's sweep across the record. `0` means "read it from the file".
 - `moods` are the words the host matches when someone asks for "something jazz" or "something slow".
 - `intro` is the host's line when the needle drops. Optional.
-- The shelf holds two rows; column count follows the number of records (16 today, 8 per row).
+- The shelf holds two rows; column count follows the number of records (14 today, 7 per row).
 
 `tools/prepare-catalog.mjs` is the artist's local script that encodes masters and art into `public/catalog` and rewrites `src/catalog.json`, keeping the hand-written `moods` and `intro` fields.
 
@@ -96,7 +96,7 @@ The host lives in `src/host/` behind one interface (`src/host/host.ts`):
 - `onTrackStart(track, context)` and `onTrackEnd(track, context)`
 - `onRequest(text, context)` answers a request with a line, a record to play, or pause/resume
 
-`ScriptedHost` (`src/host/scripted-host.ts`) runs entirely offline and is the default. `CloudHost` (`src/host/cloud-host.ts`) is the marked adapter for a cloud LLM and TTS. It is switched on by setting `VITE_HOST_ENDPOINT` at build time (see `.env.example`) to a small proxy you run. The proxy holds the LLM and TTS keys in its own environment; no key is ever in this repo or in the browser bundle. Any timeout or error falls back to the scripted host for that call, so the room never goes silent. The request and response shapes are documented at the top of `cloud-host.ts`.
+`ScriptedHost` (`src/host/scripted-host.ts`) runs entirely offline and is what a fresh clone uses, because no endpoint is set. The live site is built with `VITE_HOST_ENDPOINT` pointing at `worker/host.js`, so it uses `CloudHost`. `CloudHost` (`src/host/cloud-host.ts`) is the adapter for a cloud language model and voice. It is switched on by setting `VITE_HOST_ENDPOINT` at build time (see `.env.example`) to the worker you run; `worker/host.js` is that worker. The proxy holds the LLM and TTS keys in its own environment; no key is ever in this repo or in the browser bundle. Any timeout or error falls back to the scripted host for that call, so the room never goes silent. The request and response shapes are documented at the top of `cloud-host.ts`.
 
 ## Performance notes
 
@@ -110,7 +110,7 @@ Quest-class budget: unlit `MeshBasicMaterial` throughout with lighting painted i
 | One hand is enough | Every action (pick up, carry, drop, pause, resume, ask the host) is a single-hand pinch or palm, either hand. |
 | Grab affordances glow when a hand is near | `updateAffordances` in `src/listening-system.ts`: the sleeve nearest each fingertip glows within 16 cm, the tonearm and radio glow on approach, the platter ring lights while a record is held over it. Mouse hover gets the same glow in the flat view. |
 | Seated, everything within a two-foot radius | Room authored in seated coordinates around the head (`src/room.ts`): shelf radius 0.58 m, turntable 0.4 m ahead, radio 0.6 m to the left; every interactive piece is within 0.61 m of the head. `placeInWorld` and `recenter` fit it to the real head position. `locomotion: false`. |
-| Fast cold start | No 3D model downloads: all geometry is procedural and textures are canvas-drawn, except 16 small cover JPEGs. Audio streams on demand. |
+| Fast cold start | No 3D model downloads: all geometry is procedural and textures are canvas-drawn, except 14 small cover JPEGs. Audio streams on demand. |
 | A complete, satisfying moment under 10 minutes | Pinch the glowing record, set it down, the needle drops and the room warms up within the first minute; a full track is 2 to 3 minutes. |
 | First five minutes: one glowing record, one-line hint, no text walls | Teaching cue in `buildCue` and the update loop; welcome line in `ScriptedHost.onColdStart`; one quiet nudge after 25 s if nothing has been picked up. |
 | Captions on by default | `src/captions.ts`: on unless the listener turns them off; lazy-follow subtitles in the headset, DOM text in the flat view. |
@@ -120,6 +120,21 @@ Quest-class budget: unlit `MeshBasicMaterial` throughout with lighting painted i
 | Original, not a wrapper; no third-party media | All music and art is NoBanks Nearby's own catalog in `public/catalog`. No embeds, no streaming services. |
 | All code new after Sep 24, 2026 | Repository history starts with the scaffold commit; everything since is new work for this entry. |
 | No API keys in the repo | Cloud host reads only `VITE_HOST_ENDPOINT` (a proxy URL) from the environment; `.env*` files are git-ignored. |
+
+## Credits
+
+Third-party pieces the code uses. Licenses are listed only where this repo or its installed packages state them.
+
+| Piece | Used for | License |
+| --- | --- | --- |
+| Meta Immersive Web SDK (`@iwsdk/core`) | WebXR session, hands, input, ECS | MIT (stated in the package) |
+| Three.js (`three`, via `super-three`) | Rendering | MIT (stated in the package) |
+| `@pmndrs/uikit` and its Horizon and Lucide packages | Listed dependencies | [NEED] confirm: the package says "SEE LICENSE IN LICENSE" |
+| Generic hand models (`public/profiles/generic-hand/*.glb`, from the WebXR input profiles asset set) | Hand meshes in the headset | [NEED] confirm license and add the notice; no license file is in the repo |
+| Georgia / Times New Roman | Caption and landing text, taken from the viewer's system fonts, not shipped | n/a |
+| Synthetic voice for the host | `public/voice/*.mp3` recorded lines and live lines from the worker | [NEED] confirm the voice provider's terms allow this use |
+
+The host's language model and voice run behind `worker/host.js`. No key is in this repo.
 
 ## License
 
